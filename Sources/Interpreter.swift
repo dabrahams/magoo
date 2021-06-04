@@ -111,7 +111,7 @@ struct Interpreter {
     self.program = p
 
     frame = CallFrame(
-      resultAddress: memory.allocate(),
+      resultAddress: memory.allocate(boundTo: .int),
       onReturn: Onward { me in
         me.cleanUpPersistentAllocations(above: 0) { me in me.terminate() }
       })
@@ -125,7 +125,7 @@ struct Interpreter {
   /// Runs the program to completion and returns the exit code, if any.
   mutating func run() -> Int? {
     while step() {}
-    return memory.value(at: frame.resultAddress) as? Int
+    return memory[frame.resultAddress] as? Int
   }
 }
 
@@ -341,10 +341,11 @@ fileprivate extension Interpreter {
     _ e: Expression, mutable: Bool = false, persist: Bool = false,
     then proceed: @escaping Consumer<Address>) -> Onward
   {
-    let a = memory.allocate(mutable: mutable)
+    let t = staticType[e]!
+    let a = memory.allocate(boundTo: t, mutable: mutable)
     if tracing {
       print(
-        "\(e.site): info: allocated \(a)"
+        "\(e.site): info: allocated \(a) bound to \(t)"
           + " (\(persist ? "persistent" : "ephemeral"))")
     }
     if persist {
@@ -380,7 +381,8 @@ fileprivate extension Interpreter {
     at a: Address, then proceed: @escaping Next) -> Onward
   {
     if tracing { print("  info: deleting \(a)") }
-    memory.delete(a)
+    memory.deinitialize(a)
+    memory.deallocate(a)
     return Onward(proceed)
   }
 
@@ -544,11 +546,8 @@ fileprivate extension Interpreter {
         : source => proceed
 
     case let f as FunctionDefinition:
-      // Bogus parameterTypes and returnType until Dave preserves the
-      // typechecker's work. -Jeremy
       let result = FunctionValue(
-        dynamic_type: .function(parameterTypes: Tuple(), returnType: .int),
-        code: f)
+        dynamic_type: program.typeOfNameDeclaredBy[f.identity]!.final!, code: f)
 
       return allocate(.name(name), unlessNonNil: destination) { output, me in
         me.initialize(output, to: result, then: proceed)
@@ -644,7 +643,7 @@ fileprivate extension Interpreter {
             let argumentsType = me.staticType[.tupleLiteral(e.arguments)]!
             return me.match(
               callee.code.parameters,
-              toValueOfType: argumentsType, at: arguments
+              toValueOfType: argumentsType.tuple!, at: arguments
             ) { matched, me in
               if matched {
                 return me.run(callee.code.body!) { me in
@@ -700,14 +699,15 @@ fileprivate extension Interpreter {
     evaluate(e.base) { base, me in
       switch me.staticType[e.base] {
       case .struct:
-        let payloadAddress = me.memory.substructure(at: base)[1]!
-        let source = me.memory.substructure(at: payloadAddress)[e.member]!
+        let source = base.^e.member
+
         return output != nil
           ? me.copy(from: source, to: output!, then: proceed)
           : source => proceed
         
       case .tuple:
-        let source = me.memory.substructure(at: base)[e.member]!
+        let source = base.^e.member
+
         return output != nil
           ? me.copy(from: source, to: output!, then: proceed)
           : source => proceed
@@ -722,7 +722,7 @@ fileprivate extension Interpreter {
             let id: ASTIdentity<Alternative>
               = parentID.structure[e.member]!.identity
             let result: Value = asCallee
-              ? Type.alternative(id)
+              ? AlternativeValue(id)
               : ChoiceValue(type: parentID, discriminator: id, payload: .init())
 
             return me.deleteAnyEphemeral(at: base) { me in
@@ -745,12 +745,7 @@ fileprivate extension Interpreter {
     evaluate(t, into: output) { targetAddress, me in
       me.evaluate(i) { indexAddress, me in
         let index = me[indexAddress] as! Int
-        guard let resultAddress
-                = me.memory.substructure(at: targetAddress)[index]
-        else {
-          return me.error(
-            i, "crazy bad index \(index) for tuple \(me[targetAddress])")
-        }
+        let resultAddress = targetAddress.^index
 
         return me.deleteAnyEphemeral(at: indexAddress) { me in
           output == nil ? proceed(resultAddress, &me)
@@ -852,7 +847,8 @@ fileprivate extension Interpreter {
       return true => proceed
 
     case let .tuple(x):
-      return match(x, toValueOfType: sourceType, at: source, then: proceed)
+      return match(
+        x, toValueOfType: sourceType.tuple!, at: source, then: proceed)
 
     case let .functionCall(x):
       return match(x, toValueOfType: sourceType, at: source, then: proceed)
@@ -878,9 +874,8 @@ fileprivate extension Interpreter {
       }
 
       return match(
-        p.arguments,
-        toValueOfType: .tuple(program.payloadType[subjectAlternative]!),
-        at: memory.substructure(at: subject)[2]!, then: proceed)
+        p.arguments, toValueOfType: program.payloadType[subjectAlternative]!,
+        at: subject, then: proceed)
 
     case .int, .bool, .type, .function, .tuple, .error, .alternative:
       UNREACHABLE()
@@ -889,34 +884,30 @@ fileprivate extension Interpreter {
 
   mutating func match(
     _ p: TuplePattern,
-    toValueOfType subjectType: Type, at subject: Address,
+    toValueOfType subjectTypes: Tuple<Type>, at subject: Address,
     then proceed: @escaping Consumer<Bool>) -> Onward
   {
-    guard case let .tuple(subjectTypes) = subjectType else {
-      return false => proceed
-    }
-
-    let subjectStructure = self.memory.substructure(at: subject)
-    if p.count != subjectStructure.count { return false => proceed }
+    let p1 = p.fields()
+    if !subjectTypes.isCongruent(to: p1) { return false => proceed }
 
     return matchElements(
-      p.fields().elements[...],
-      toValuesOfType: subjectTypes, at: subjectStructure, then: proceed)
+      p1.elements[...],
+      toValuesOfType: subjectTypes, at: subject, then: proceed)
   }
 
   mutating func matchElements(
     _ p: Tuple<Pattern>.Elements.SubSequence,
-    toValuesOfType subjectTypes: Tuple<Type>, at subjects: Tuple<Address>,
+    toValuesOfType subjectTypes: Tuple<Type>, at subject: Address,
     then proceed: @escaping Consumer<Bool>) -> Onward
   {
     guard let (k0, p0) = p.first else { return true => proceed }
     return match(
-      p0, toValueOfType: subjectTypes[k0]!, at: subjects[k0]!
+      p0, toValueOfType: subjectTypes[k0]!, at: subject.^k0
     ) { matched, me in
       if !matched { return false => proceed }
       return me.matchElements(
         p.dropFirst(),
-        toValuesOfType: subjectTypes, at: subjects, then: proceed)
+        toValuesOfType: subjectTypes, at: subject, then: proceed)
     }
   }
 }
@@ -938,7 +929,7 @@ fileprivate extension TupleSyntax {
   func fields() -> Tuple<Payload> {
     var l = ErrorLog()
     let r = fields(reportingDuplicatesIn: &l)
-    assert(l.isEmpty)
+    sanityCheck(l.isEmpty)
     return r
   }
 }

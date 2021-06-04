@@ -2,15 +2,73 @@
 // Exceptions. See /LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+/// The Swift representation of uninitialized Carbon values.
+fileprivate struct Uninitialized: AtomicValue {
+  let dynamic_type: Type
+}
+
+/// The location of a `Value` in `Memory`, often a sub-part of some other
+/// `Value`.
 struct Address: Hashable, CustomStringConvertible {
-  fileprivate init(_ offset: Int) { self.offset = offset }
-  var description: String { "@\(offset)" }
-  private let offset: Int
+  /// The allocation that created this address.
+  let allocation: Int
+
+  /// Which part of the Value at the top level of the allocation the address
+  /// refers to.
+  let subObject: WritableKeyPath<Value, Value>
+
+  /// A string representation for diagnostic purposes.
+  let description: String
+}
+
+/// Address composition.
+extension Address {
+  /// Returns an address that accesses the given field of the value at `base`.
+  static func .^ (base: Address, field: FieldID) -> Address {
+    Address(
+      allocation: base.allocation,
+      subObject: base.subObject.appending(path: \.self[field]!),
+      description: base.description + {
+        switch field {
+        case let .position(x): return "[\(x)]"
+        case let .label(x): return ".\(x.text)"
+        }
+      }()
+    )
+  }
+
+  /// Returns an address that accesses the given field of the value at `base`.
+  static func .^ (base: Address, field: Identifier) -> Address {
+    base .^ .label(field)
+  }
+
+  /// Returns an address that accesses the given field of the value at `base`.
+  static func .^ (base: Address, field: Int) -> Address {
+    base .^ .position(field)
+  }
+
+  /// Assuming the value at `self` has concrete type `T`, returns the address of
+  /// the given part of that value, using `partDescription` to extend the
+  /// textual representation.
+  ///
+  /// Used to access parts that can't be addressed directly in carbon, e.g. the
+  /// `returnType` part of a `FunctionType`, which has no carbon name, but whose
+  /// address must be bound to variables as part of pattern matching.
+  func addresseePart<T: Value>(
+    _ part: WritableKeyPath<T, Value>, _ partDescription: String
+  ) -> Address {
+    Address(
+      allocation: self.allocation,
+      subObject: self.subObject
+        .appending(path: \.self[downcastTo: TypeID<T>()]!)
+        .appending(path: part),
+      description: self.description + partDescription)
+  }
 }
 
 /// Stops the program with an error exit code and the given message.
 ///
-/// - Note: only works in contexts where the return type can be deduced,
+/// - Note: use this in contexts where the return type can be deduced,
 ///   e.g. dict[k] ?? fatal("key not found").
 func fatal<R>(
   file: StaticString = #filePath, line: UInt = #line, _ msg: String
@@ -20,206 +78,111 @@ func fatal<R>(
   fatalError("\n" + msg, file: (file), line: line)
 }
 
+/// Stops the program with an error exit code and the given message.
+func fatal(
+  file: StaticString = #filePath, line: UInt = #line, _ msg: String
+) -> Never {
+  // Add a newline so the message can also contain a source region (in carbon
+  // code) that's recognized by IDEs.
+  fatalError("\n" + msg, file: (file), line: line)
+}
+
+/// Storage for every value handled by the interpreter.
 struct Memory {
-  /// An allocated element of memory.
-  private struct Location {
-    enum Storage {
-      /// The value is stored directly.
-      case atom(AtomicValue)
+  /// Everything stored in memory, accessed via its allocation value.
+  private var allocations: [Int: Value] = [:]
 
-      /// The parts of the value are stored indirectly
-      case compound(type: Type, parts: Tuple<Address>)
-    }
+  /// The allocated addresses that contain mutable values.
+  private var mutableAllocations: Set<Int> = []
 
-    /// A representation of the stored value, with respect to the rest of memory.
-    var occupant: Storage?
-
-    var atom: AtomicValue? {
-      if case let .atom(r) = occupant { return r }
-      else { return nil }
-    }
-
-    var compound: (type: Type, parts: Tuple<Address>)? {
-      if case let .compound(type: t, parts: p) = occupant { return (t, p) }
-      else { return nil }
-    }
-    let mutable: Bool
-  }
-
-  private var storage: [Address: Location] = [:]
-  private(set) var nextOffset = 0
+  /// The base of the next address to be allocated.
+  private var nextAllocation = 0
 }
 
 extension Memory {
-  /// Returns an uninitialized address.
+  /// Returns an uninitialized address earmarked for storing values of type `t`.
   ///
-  /// - Parameter mutable: `true` iff mutations of the Value at this address
+  /// - Parameter mutable: `true` iff mutations of the value at this address
   ///   will be allowed.
-  mutating func allocate(mutable: Bool = false) -> Address {
-    defer { nextOffset += 1 }
-    storage[Address(nextOffset)] = Location(mutable: mutable)
-    return Address(nextOffset)
-  }
-
-  /// Initializes the value at `a` to a new instance of `type` with the given
-  /// substructure.
-  ///
-  /// Use this function to adopt storage of already-computed parts into
-  /// newly-initialized values.
-  ///
-  /// - Note: initialization is not considered a mutation of `a`'s value.
-  /// - Requires: `a` is an allocated address.
-  mutating func initialize(
-    _ a: Address, as type: Type, adoptingParts parts: Tuple<Address>
-  ) {
-    storage[a]!.occupant = .compound(type: type, parts: parts)
+  mutating func allocate(boundTo t: Type, mutable: Bool = false) -> Address {
+    defer { nextAllocation += 1 }
+    allocations[nextAllocation] = Uninitialized(dynamic_type: t)
+    if mutable { mutableAllocations.insert(nextAllocation) }
+    return Address(
+      allocation: nextAllocation, subObject: \.self,
+      description: "@\(nextAllocation)")
   }
 
   /// Initializes the value at `a` to `v`.
   ///
   /// - Note: initialization is not considered a mutation of `a`'s value.
-  /// - Requires: `a` is an allocated address.
+  /// - Requires: `a` is an allocated but uninitialized address.
   mutating func initialize(_ a: Address, to v: Value) {
-    let i = storage.index(forKey: a)
-      ?? fatal("initializing unallocated address \(a).")
-
-    if storage.values[i].occupant != nil {
-      fatalError("address \(a) already initialized to \(self[a]).")
-    }
-
-    if let atom = v as? AtomicValue {
-      // Can't use v.parts.isEmpty as a key because empty tuples have no parts.
-      sanityCheck(v.parts.isEmpty)
-      storage.values[i].occupant = .atom(atom)
-    }
-    else {
-      let isMutable = storage.values[i].mutable
-
-      // This creates new dictionary entries so will invalidate the index i
-      storage[a]!.occupant = Location.Storage.compound(
-        type: v.dynamic_type,
-        parts: v.parts.mapFields {
-          let l = allocate(mutable: isMutable) // NOTE: SIDE-EFFECTS
-          initialize(l, to: $0) // NOTE: SIDE-EFFECTS
-          return l
-        })
-      
-    }
+    sanityCheck(!isInitialized(at: a))
+    sanityCheck(boundType(at: a) == v.dynamic_type,
+                "\(boundType(at: a)!) != \(v.dynamic_type)")
+    allocations[a.allocation]![keyPath: a.subObject] = v
   }
 
   /// Deinitializes the storage at `a`, returning it to an uninitialized state.
   ///
   /// - Note: deinitialization is not considered a mutation of `a`'s value.
-  /// - Requires: `a` is the address of an initialized value.
+  /// - Requires: `a` is the address of an allocated, initialized value.
   mutating func deinitialize(_ a: Address) {
-    let i = storage.index(forKey: a)
-      ?? fatal("deinitializing unallocated address \(a).")
-
-    switch storage[i].value.occupant
-      ?? fatal("deinitializing uninitialized address \(a).")
-    {
-    case .atom: break
-    case let .compound(type: _, parts: structure):
-      for a1 in structure.fields { deinitialize(a1) }
-    }
-    storage.values[i].occupant = nil
+    sanityCheck(isInitialized(at: a))
+    allocations[a.allocation]![keyPath: a.subObject]
+      = Uninitialized(dynamic_type: boundType(at: a)!)
   }
 
   /// Deallocates the storage at `a`.
   ///
-  /// - Requires: `a` is an uninitialized address.
+  /// - Requires: `a` is an allocated but uninitialized address.
   mutating func deallocate(_ a: Address) {
-    let v = storage[a] ?? fatal("deallocating unallocated address \(a).")
-    sanityCheck(v.occupant == nil, "deallocating initialized address \(a)")
-    storage[a] = nil
-  }
-
-  /// Deintializes and then deallocates the memory at `a`
-  ///
-  /// - Requires: `a` is the address of an initialized value.
-  mutating func delete(_ a: Address) {
-    deinitialize(a)
-    deallocate(a)
+    sanityCheck(
+      !isInitialized(at: a), "\(self[a]) at \(a) must be deinitialized")
+    sanityCheck(
+      a.subObject == \.self, "Can't deallocate subObject \(a.subObject)")
+    _ = allocations.removeValue(forKey: a.allocation)
   }
 
   /// Accesses the value at `a`.
   ///
   /// - Requires: The value at `a` is initialized.
-  /// - Requires: (`set`) The type of the new value must match that of
-  ///   the existing value at `a`.
-  /// - Requires: (`set`) `a` was allocated with `mutable = true`.
   subscript(a: Address) -> Value {
-    let i = storage.index(forKey: a)
-      ?? fatal("reading from unallocated address \(a).")
-
-    switch storage[i].value.occupant
-      ?? fatal("reading from uninitialized address \(a).")
-    {
-    case let .atom(x):
-      return x
-    case let .compound(type: type, _):
-      return type.swiftType.init(from: a, in: self)
-    }
+    allocations[a.allocation]![keyPath: a.subObject]
   }
 
+  /// Assigns the value at `target` into `source`.
+  ///
+  /// - Requires: The type of the value at `source` must match that of
+  ///   the existing value at `target`.
+  /// - Requires: `target` was allocated with `mutable = true`.
   mutating func assign(from source: Address, into target: Address) {
-    
-    // Only check the top level type because choices of a single type can have
-    // different payload types.
-    func uncheckedAssign(from source: Address, into target: Address) {
-      sanityCheck(storage[target]!.mutable)
-
-      let sourceOccupant = storage[source]!.occupant!
-      switch (sourceOccupant, storage[target]!.occupant!) {
-      case let (.atom(s), .atom(t)):
-        sanityCheck(s.dynamic_type == t.dynamic_type)
-        storage[target]!.occupant = sourceOccupant
-
-      case let (.compound(type: sourceType, parts: sourceMap),
-                .compound(type: targetType, parts: targetMap)):
-        sanityCheck(sourceType == targetType)
-
-        // Choices of a single type can have different payload types, so if the
-        // parts are not congruent, we need to deinitialize/reinitialize.
-        if sourceMap.count == targetMap.count
-             && sourceMap.elements.keys.allSatisfy({ targetMap[$0] != nil })
-        {
-          for (field, s) in sourceMap.elements {
-            assign(from: s, into: targetMap[field]!)
-          }
-        }
-        else {
-          deinitialize(target)
-          initialize(target, to: self[source])
-        }
-      default: UNREACHABLE()
-      }
-    }
-
-    sanityCheck(self[source].dynamic_type == self[target].dynamic_type)
-    uncheckedAssign(from: source, into: target)
-  }
-
-  /// Returns the value at `a` or nil if `a` is not an initialized address.
-  func value(at a: Address) -> Value? {
-    guard storage.index(forKey: a) != nil else { return nil }
-    return self[a]
-  }
-
-  /// Returns the substructure of the value stored at `a`
-  func substructure(at a: Address) -> Tuple<Address> {
-    switch storage[a]!.occupant! {
-    case .atom: return .init()
-    case .compound(type: _, let r): return r
-    }
-  }
-
-  /// Returns the value at `a`.
-  func atom(at a: Address) -> AtomicValue {
-    return storage[a]!.atom!
+    sanityCheck(
+      mutableAllocations.contains(target.allocation),
+      "Assigning into immutable address \(target)"
+    )
+    sanityCheck(isInitialized(at: source))
+    sanityCheck(isInitialized(at: target))
+    sanityCheck(boundType(at: source) == boundType(at: target))
+    allocations[target.allocation]![keyPath: target.subObject] = self[source]
   }
 }
 
-// TODO: Stop using tuples of addresses as a storage substrate (I think).
-// Alternative, StructDefinition, and ChoiceDefinition can then stop modeling
-// Value.
+/// Private Helpers
+extension Memory {
+  /// Returns `true` iff `a` has been initialized with a value.
+  private func isInitialized(at a: Address) -> Bool {
+    !(allocations[a.allocation]![keyPath: a.subObject] is Uninitialized)
+  }
+
+  /// Returns `true` iff `a` was allocated as mutable.
+  private func isMutable(at a: Address) -> Bool {
+    mutableAllocations.contains(a.allocation)
+  }
+
+  /// Returns the type to which `a` was bound at allocation.
+  private func boundType(at a: Address) -> Type? {
+    allocations[a.allocation]![keyPath: a.subObject].dynamic_type
+  }
+}

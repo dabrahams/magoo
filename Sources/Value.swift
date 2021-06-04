@@ -2,6 +2,44 @@
 // Exceptions. See /LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+/// A singular-valued type that identifies `T`.
+///
+/// You can think of this as a `Hashable`, dynamically-non-polymorphic version
+/// of `T.Type`; which is both non-`Hashable`, and can be used to represent the
+/// dynamic type of some supertype instance.
+struct TypeID<T>: Hashable {
+  func hash(into h: inout Hasher) { ObjectIdentifier(T.self).hash(into: &h) }
+}
+
+/// A thing that can be (mutably) subscripted with `FieldID`s (and for
+/// convenience, `Int` and `Identifier`).
+///
+/// - Note: This protocol does not represent a concept; it is simply mechanism.
+protocol FieldAccess {
+  /// The type of thing accessed by `FieldID`.
+  associatedtype Field
+
+  /// Accesses the given field.
+  subscript(_: FieldID) -> Field? { get set }
+}
+
+extension FieldAccess {
+  /// Accesses the field `.position(n)`.
+  subscript(n: Int) -> Field? {
+    get { self[.position(n)] }
+    set { self[.position(n)] = newValue }
+  }
+
+  /// Accesses the field `.label(fieldName)`.
+  subscript(fieldName: Identifier) -> Field? {
+    get { self[.label(fieldName)] }
+    set { self[.label(fieldName)] = newValue }
+  }
+}
+
+/// A Carbon value.
+///
+/// `Value` is the supertype of all Swift types that represent Carbon instances.
 protocol Value {
   /// The actual type of this value.
   ///
@@ -13,34 +51,55 @@ protocol Value {
   /// built-in property name.
   var dynamic_type: Type { get }
 
-  /// The parts of this value that can be individually bound to variables.
-  var parts: Tuple<Value> { get }
-
-  /// Deserializes a new instance from `memory` at `location`.
-  init(from location: Address, in memory: Memory)
+  /// Accesses the given field.
+  subscript(_: FieldID) -> Value? { get set }
 }
 
-protocol CompoundValue: Value {
-  /// Creates an instance from the given parts.
-  init(parts: Tuple<Value>)
-}
+/// Type conversions that can be used via keypaths for `Address` formation.
+extension Value {
+  /// Accesses `self` if it is an instance of `T`, and `nil` otherwise.
+  ///
+  /// Preconditions: Written values must either be a non-`nil` of type `Self?`,
+  /// or `U?.nil`, where `U.self != Self`.
+  subscript<T: Value>(downcastTo _: TypeID<T>) -> T? {
+    get { self as? T }
+    set {
+      guard let v = newValue else {
+        sanityCheck(self as? T == nil)
+        return
+      }
+      self = v as! Self
+    }
+  }
 
-extension CompoundValue {
-  /// Deserializes a new instance from `memory` at `location`.
-  init(from location: Address, in memory: Memory) {
-    self.init(parts: memory.substructure(at: location).mapFields { memory[$0] })
+  /// `self` as an instance of its supertype `Value`.
+  ///
+  /// Because `self` is already of type `Value`, this property is only useful in
+  /// keypath formation.
+  var upcastToValue: Value {
+    get { self }
+    set { self = newValue as! Self }
   }
 }
 
-protocol AtomicValue: Value {}
+/// Swift representation of Carbon types having no fields.
+protocol AtomicValue: Value, FieldAccess {}
+
 extension AtomicValue {
-  var parts: Tuple<Value> { Tuple() }
-
-  /// Returns the value stored at the given location
-  init(from location: Address, in memory: Memory) {
-    self = memory.atom(at: location) as! Self
+  /// Accesses the given field.
+  subscript(field: FieldID) -> Value? {
+    get { nil }
+    set {
+      if newValue != nil {
+        fatal("Value \(self) of atomic type"
+                + " \(self.dynamic_type) has no field \(field)")
+      }
+    }
   }
 }
+
+/// Swift representation of Carbon types having fields.
+protocol CompoundValue: Value, FieldAccess {}
 
 struct FunctionValue: AtomicValue, Equatable {
   let dynamic_type: Type
@@ -60,7 +119,7 @@ extension BoolValue: AtomicValue {
 struct ChoiceValue: CompoundValue {
   let dynamic_type_: ASTIdentity<ChoiceDefinition>
   let discriminator: ASTIdentity<Alternative>
-  let payload: Tuple<Value>
+  var payload: Tuple<Value>
 
   var dynamic_type: Type { .choice(dynamic_type_) }
 
@@ -74,23 +133,9 @@ struct ChoiceValue: CompoundValue {
     self.payload = payload
   }
 
-  init(parts: Tuple<Value>) {
-    guard
-      case .choice(let parent) = parts[0] as! Type,
-      case .alternative(let discriminator) = parts[1] as! Type
-    else {
-      UNREACHABLE()
-    }
-    self.dynamic_type_ = parent
-    self.discriminator = discriminator
-    self.payload = parts[2] as! Tuple<Value>
- }
-
-  var parts: Tuple<Value> {
-    Tuple(
-      [.position(0): dynamic_type,
-       .position(1): Type.alternative(discriminator),
-       .position(2): payload])
+  subscript(field: FieldID) -> Value? {
+    get { payload[field] }
+    set { payload[field] = newValue! }
   }
 }
 
@@ -100,11 +145,9 @@ extension ChoiceValue: CustomStringConvertible {
   }
 }
 
-// TODO: Alternative => AlternativeDefinition?
-
 struct StructValue: CompoundValue {
   let dynamic_type_: ASTIdentity<StructDefinition>
-  let payload: Tuple<Value>
+  var payload: Tuple<Value>
 
   var dynamic_type: Type { .struct(dynamic_type_) }
 
@@ -116,19 +159,18 @@ struct StructValue: CompoundValue {
     self.payload = payload
   }
 
-  init(parts: Tuple<Value>) {
-    guard
-      case .struct(let parent) = parts[0] as! Type
-    else {
-      UNREACHABLE()
-    }
-    self.dynamic_type_ = parent
-    self.payload = parts[1] as! Tuple<Value>
- }
-
-  var parts: Tuple<Value> {
-    Tuple(
-      [.position(0): dynamic_type,
-       .position(1): payload])
+  subscript(field: FieldID) -> Value? {
+    get { payload[field] }
+    set { payload[field] = newValue! }
   }
 }
+
+/// A (singular) value of alternative type.
+struct AlternativeValue: AtomicValue {
+  init(_ t: ASTIdentity<Alternative>) { dynamic_type_ = t }
+
+  let dynamic_type_: ASTIdentity<Alternative>
+  var dynamic_type: Type { .alternative(dynamic_type_) }
+}
+
+// TODO: Alternative => AlternativeDefinition?

@@ -16,7 +16,7 @@ enum FieldID: Hashable {
 ///
 /// The `fields` of a tuple are instances of `Field`, while the The `element`s
 /// are `(FieldID, Field)` pairs.
-struct Tuple<Field> {
+struct Tuple<Field> : FieldAccess {
   /// The number of fields in `self`.
   var count: Int { elements.count }
 
@@ -49,14 +49,15 @@ struct Tuple<Field> {
   /// Creates an instance using the given underlying storage.
   init(_ storage: [FieldID: Field] = [:]) { self.elements = storage }
 
-  /// Returns the field with the given id, or `nil` if no such field exists.
-  subscript(k: FieldID) -> Field? { elements[k] }
-
-  /// Returns the field with the given name, or `nil` if no such field exists.
-  subscript(fieldName: Identifier) -> Field? { elements[.label(fieldName)] }
-
-  /// Returns the given positional field, or `nil` if no such field exists.
-  subscript(position: Int) -> Field? { elements[.position(position)] }
+  /// Accesses the field with the given id
+  subscript(k: FieldID) -> Field? {
+    get { elements[k] }
+    set {
+      sanityCheck(newValue != nil)
+      sanityCheck(elements[k] != nil)
+      elements[k] = newValue
+    }
+  }
 
   typealias Elements = [FieldID: Field]
 
@@ -68,6 +69,14 @@ struct Tuple<Field> {
 }
 extension Tuple: Equatable where Field: Equatable {}
 
+extension Tuple {
+  /// Returns `true` iff `self` has the same set of fieldIDs as `other`.
+  func isCongruent<OtherPayload>(to other: Tuple<OtherPayload>) -> Bool {
+    count == other.count && elements.keys.allSatisfy {
+      other.elements[$0] != nil
+    }
+  }
+}
 extension Tuple: CustomStringConvertible {
   var description: String {
     let labeled = elements.lazy.compactMap { (k, v) -> (String, Field)? in
@@ -100,6 +109,15 @@ extension TupleValue: Value, CompoundValue {
 
 extension TupleType {
   static let void: Self = .init([:])
+
+  /// Accesses the `Value` corresponding to `self`.
+  ///
+  /// Writing anything other than a tuple of types into this property is a
+  /// precondition violation.
+  var upcastToValue: Value {
+    get { self.mapFields { $0 } }
+    set { self = (newValue as! TupleValue).mapFields { Type($0)! } }
+  }
 }
 
 extension TupleSyntax {
