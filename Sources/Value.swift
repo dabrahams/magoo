@@ -119,18 +119,25 @@ extension BoolValue: AtomicValue {
 struct ChoiceValue: CompoundValue {
   let dynamic_type_: ASTIdentity<ChoiceDefinition>
   let discriminator: ASTIdentity<Alternative>
-  var payload: Tuple<Value>
+  var payload: Value {
+    didSet {
+      guard case .tuple = payload.dynamic_type else {
+        fatal("Choice payload must be a tuple")
+      }
+    }
+  }
 
   var dynamic_type: Type { .choice(dynamic_type_) }
 
   init(
     type: ASTIdentity<ChoiceDefinition>,
     discriminator: ASTIdentity<Alternative>,
-    payload: Tuple<Value>
+    payload: Value
   ) {
     dynamic_type_ = type
     self.discriminator = discriminator
     self.payload = payload
+    self.payload = payload // trigger didSet
   }
 
   subscript(field: FieldID) -> Value? {
@@ -147,16 +154,23 @@ extension ChoiceValue: CustomStringConvertible {
 
 struct StructValue: CompoundValue {
   let dynamic_type_: ASTIdentity<StructDefinition>
-  var payload: Tuple<Value>
+  var payload: Value {
+    didSet {
+      guard case .tuple = payload.dynamic_type else {
+        fatal("Struct payload must be a tuple")
+      }
+    }
+  }
 
   var dynamic_type: Type { .struct(dynamic_type_) }
 
   init(
     type: ASTIdentity<StructDefinition>,
-    payload: Tuple<Value>
+    payload: Value
   ) {
     dynamic_type_ = type
     self.payload = payload
+    self.payload = payload // trigger didSet
   }
 
   subscript(field: FieldID) -> Value? {
@@ -171,6 +185,13 @@ struct AlternativeValue: AtomicValue {
 
   let dynamic_type_: ASTIdentity<Alternative>
   var dynamic_type: Type { .alternative(dynamic_type_) }
+}
+
+/// The Swift representation of uninitialized Carbon values.
+struct Uninitialized: AtomicValue {
+  init(_ dynamic_type: Type) { self.dynamic_type = dynamic_type }
+
+  let dynamic_type: Type
 }
 
 // TODO: Alternative => AlternativeDefinition?

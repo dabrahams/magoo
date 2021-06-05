@@ -2,11 +2,6 @@
 // Exceptions. See /LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-/// The Swift representation of uninitialized Carbon values.
-fileprivate struct Uninitialized: AtomicValue {
-  let dynamic_type: Type
-}
-
 /// The location of a `Value` in `Memory`, often a sub-part of some other
 /// `Value`.
 struct Address: Hashable, CustomStringConvertible {
@@ -106,7 +101,7 @@ extension Memory {
   ///   will be allowed.
   mutating func allocate(boundTo t: Type, mutable: Bool = false) -> Address {
     defer { nextAllocation += 1 }
-    allocations[nextAllocation] = Uninitialized(dynamic_type: t)
+    allocations[nextAllocation] = Uninitialized(t)
     if mutable { mutableAllocations.insert(nextAllocation) }
     return Address(
       allocation: nextAllocation, subObject: \.self,
@@ -118,7 +113,7 @@ extension Memory {
   /// - Note: initialization is not considered a mutation of `a`'s value.
   /// - Requires: `a` is an allocated but uninitialized address.
   mutating func initialize(_ a: Address, to v: Value) {
-    sanityCheck(!isInitialized(at: a))
+    sanityCheck(!isInitialized(at: a), "reinitializing \(a)")
     sanityCheck(boundType(at: a) == v.dynamic_type,
                 "\(boundType(at: a)!) != \(v.dynamic_type)")
     allocations[a.allocation]![keyPath: a.subObject] = v
@@ -131,7 +126,7 @@ extension Memory {
   mutating func deinitialize(_ a: Address) {
     sanityCheck(isInitialized(at: a))
     allocations[a.allocation]![keyPath: a.subObject]
-      = Uninitialized(dynamic_type: boundType(at: a)!)
+      = Uninitialized(boundType(at: a)!)
   }
 
   /// Deallocates the storage at `a`.

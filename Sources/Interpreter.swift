@@ -437,8 +437,13 @@ fileprivate extension Interpreter {
 
 /// Expression evaluation.
 fileprivate extension Interpreter {
+  /// Evaluates `e` into a value of type `T`, which is then passed to `proceed`.
+  ///
+  /// - Parameter asCallee: `true` if `e` is in callee position in a function
+  ///   call expression.
   mutating func evaluateAndConsume<T>(
-    _ e: Expression, in proceed: @escaping Consumer<T>) -> Onward {
+    _ e: Expression, asCallee: Bool = false,
+    in proceed: @escaping Consumer<T>) -> Onward {
     evaluate(e) { p, me in
       let v = me[p] as! T
       return me.deleteAnyEphemeral(at: p) { me in proceed(v, &me) }
@@ -449,7 +454,7 @@ fileprivate extension Interpreter {
   /// the address of the result on to `proceed_`.
   ///
   /// - Parameter asCallee: `true` if `e` is in callee position in a function
-  /// call expression.
+  ///   call expression.
   mutating func evaluate(
     _ e: Expression, asCallee: Bool = false, into destination: Address? = nil,
     then proceed_: @escaping Consumer<Address>) -> Onward
@@ -593,79 +598,128 @@ fileprivate extension Interpreter {
     }
   }
 
-  /// Evaluates `e` into `output` and passes the address of the result on to
+  /// Evaluates `call` into `output` and passes the address of the result on to
   /// `proceed`.
   mutating func evaluate(
-    _ e: FunctionCall<Expression>, into output: Address,
+    _ call: FunctionCall<Expression>, into output: Address,
     then proceed: @escaping Consumer<Address>) -> Onward
   {
-    evaluate(e.callee, asCallee: true) { calleeAddress, me in
-      me.evaluate(.tupleLiteral(e.arguments)) { arguments, me in
-        switch me.staticType[e.callee]! {
+    switch staticType[call.callee]! {
+    case .function:
+      return evaluateCalledFunction(call, into: output, then: proceed)
 
-        case .function:
-          let callee = me[calleeAddress] as! FunctionValue
+    case .type:
+      return evaluateStructLiteral(call, into: output, then: proceed)
 
-          return me.deleteAnyEphemeral(at: calleeAddress) { me in
-            let old_frame = me.frame
+    case .alternative:
+      return evaluateChoiceLiteral(call, into: output, then: proceed)
 
-            me.frame = CallFrame(
-              resultAddress: output,
-              onReturn: Onward { me in
-                me.cleanUpPersistentAllocations(above: 0) { me in
-                  me.frame = old_frame
-                  return me.deleteAnyEphemeral(at: arguments) { me in
-                    proceed(output, &me)
-                  }
-                }
-              })
+    case .int, .bool, .choice, .struct, .tuple, .error:
+      UNREACHABLE()
+    }
+  }
 
-            let argumentsType = me.staticType[.tupleLiteral(e.arguments)]!
-            return me.match(
-              callee.code.parameters,
-              toValueOfType: argumentsType.tuple!, at: arguments
-            ) { matched, me in
-              if matched {
-                return me.run(callee.code.body!) { me in
-                  // Return an empty tuple when the function falls off the end.
-                  me.initialize(me.frame.resultAddress, to: Tuple()) {
-                    _, me in me.frame.onReturn
-                  }
-                }
+  /// Evaluates `call` into `output` and passes the address of the result on to
+  /// `proceed`.
+  ///
+  /// - Requires: `call.callee` has function type.
+  mutating func evaluateCalledFunction(
+    _ call: FunctionCall<Expression>, into output: Address,
+    then proceed: @escaping Consumer<Address>) -> Onward
+  {
+    evaluateAndConsume(call.callee, asCallee: true) {
+      (callee: FunctionValue, me) in
+
+      me.evaluate(.tupleLiteral(call.arguments)) { arguments, me in
+        let savedFrame = me.frame
+
+        // Set up the callee's frame.
+        me.frame = CallFrame(
+          resultAddress: output,
+          onReturn: Onward { me in
+            me.cleanUpPersistentAllocations(above: 0) { me in
+              me.frame = savedFrame
+              return me.deleteAnyEphemeral(at: arguments) { me in
+                proceed(output, &me)
               }
-              return me.error(
-                e.arguments,
-                "arguments don't match literal values in parameter list",
-                notes: [("parameter list", callee.code.parameters.site)])
             }
+          })
+
+        // Now we're in the context of the callee.
+        let argumentsType = me.staticType[.tupleLiteral(call.arguments)]!
+
+        return me.match(
+          callee.code.parameters,
+          toValueOfType: argumentsType.tuple!, at: arguments
+        ) { matched, me in
+
+          guard matched else {
+            // refutable parameter lists not currently rejected in type checker.
+            return me.error(
+              call.arguments,
+              "arguments don't match literal values in parameter list",
+              notes: [("parameter list", callee.code.parameters.site)])
           }
 
-        case let .alternative(discriminator):
-          // FIXME: there will be an extra copy of the payload; the result
-          // should adopt the payload in memory.
-          let result = ChoiceValue(
-            type: me.program.enclosingChoice[discriminator.structure]!.identity,
-            discriminator: discriminator,
-            payload: me[arguments] as! Tuple<Value>)
-          return
-            me.deleteAnyEphemerals(at: [calleeAddress, arguments]) { me in
-              me.initialize(output, to: result, then: proceed)
+          return me.run(callee.code.body!) { me in
+            // Return an empty tuple when the function falls off the end.
+            // We only arrive here if `onReturn` isn't invoked within the body.
+            me.initialize(me.frame.resultAddress, to: Tuple()) {
+              _, me in me.frame.onReturn
             }
-
-        case .type:
-          guard case .struct(let id) = me[calleeAddress] as! Type else {
-            UNREACHABLE()
           }
-          let result = StructValue(
-            type: id,
-            payload: me[arguments] as! Tuple<Value>)
-          return 
-            me.deleteAnyEphemerals(at: [calleeAddress, arguments]) { me in
-              me.initialize(output, to: result, then: proceed)
-            }
-          case .int, .bool, .choice, .struct, .tuple, .error:
-            UNREACHABLE()
         }
+      }
+    }
+  }
+
+  /// Evaluates `call` into `output` and passes the address of the result on to
+  /// `proceed`.
+  ///
+  /// - Requires: `call.callee` has alternative type.
+  mutating func evaluateChoiceLiteral(
+    _ call: FunctionCall<Expression>, into output: Address,
+    then proceed: @escaping Consumer<Address>) -> Onward
+  {
+    guard case let .alternative(discriminator) = staticType[call.callee]
+    else { UNREACHABLE() }
+
+    let payloadType = program.payloadType[discriminator]!
+
+    let partialResult = ChoiceValue(
+      type: program.enclosingChoice[discriminator.structure]!.identity,
+      discriminator: discriminator,
+      payload: Uninitialized(.tuple(payloadType)))
+
+    return initialize(output, to: partialResult) { _, me in
+      let payloadAddress
+        = output.addresseePart(\ChoiceValue.payload, ".payload")
+      return me.evaluate(.tupleLiteral(call.arguments), into: payloadAddress)
+      { _, me in output => proceed  }
+    }
+  }
+
+  /// Evaluates `call` into `output` and passes the address of the result on to
+  /// `proceed`.
+  ///
+  /// - Requires: `call.callee` is a `struct` type.
+  mutating func evaluateStructLiteral(
+    _ call: FunctionCall<Expression>, into output: Address,
+    then proceed: @escaping Consumer<Address>) -> Onward
+  {
+    evaluateAndConsume(call.callee, asCallee: true) { (callee: Type, me) in
+      guard case .struct(let structID) = callee else {
+        UNREACHABLE()
+      }
+      let payloadType = me.staticType[.tupleLiteral(call.arguments)]!
+      let partialResult = StructValue(
+        type: structID, payload: Uninitialized(payloadType))
+
+      return me.initialize(output, to: partialResult) { _, me in
+        let payloadAddress
+          = output.addresseePart(\StructValue.payload, ".payload")
+        return me.evaluate(.tupleLiteral(call.arguments), into: payloadAddress)
+        { _, me in output => proceed  }
       }
     }
   }
@@ -703,7 +757,7 @@ fileprivate extension Interpreter {
               = parentID.structure[e.member]!.identity
             let result: Value = asCallee
               ? AlternativeValue(id)
-              : ChoiceValue(type: parentID, discriminator: id, payload: .init())
+              : ChoiceValue(type: parentID, discriminator: id, payload: Tuple())
 
             return me.deleteAnyEphemeral(at: base) { me in
               me.initialize(output, to: result, then: proceed)
