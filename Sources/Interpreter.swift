@@ -189,22 +189,14 @@ fileprivate extension Interpreter {
       }
 
     case let .assignment(target: t, source: s, _):
-      return evaluate(t) { target, me in
-        sanityCheck(
-          me.frame.ephemeralAllocations.isEmpty, "\(t) not an lvalue?")
-        // Can't evaluate source into target because target may be referenced in
-        // source (e.g. x = x - 1)
-        return me.evaluate(s) { source, me in
+        return evaluate(s) { source, me in
           if me.tracing {
-            print(
-              "\(t.site): info: assigning"
-                + " \(me[source])\(source) into \(target)")
+            print("\(t.site): info: assigning \(me[source]) from \(source)")
           }
-          return me.assign(target, from: source) { me in
+          return me.assign(t, from: source) { me in
             me.deleteAnyEphemeral(at: source, then: proceed)
           }
         }
-      }
 
     case let .initialization(i):
       // Storage must be allocated for the initializer value even if it's an
@@ -421,19 +413,6 @@ fileprivate extension Interpreter {
     return initialize(target, to: self[source], then: proceed)
   }
 
-  /// Copies the value at `source` into the `target` address and continues with
-  /// `proceed`.
-  mutating func assign(
-    _ target: Address, from source: Address,
-    then proceed: @escaping Next) -> Onward
-  {
-    if tracing {
-      print("  info: assigning \(self[source])\(source) into \(target)")
-    }
-    memory.assign(from: source, into: target)
-    return Onward(proceed)
-  }
-
   mutating func deinitialize(
     valueAt target: Address, then proceed: @escaping Next) -> Onward
   {
@@ -456,6 +435,7 @@ fileprivate extension Interpreter {
   }
 }
 
+/// Expression evaluation.
 fileprivate extension Interpreter {
   mutating func evaluateAndConsume<T>(
     _ e: Expression, in proceed: @escaping Consumer<T>) -> Onward {
@@ -818,6 +798,77 @@ func areEqual(_ l: Value, _ r: Value) -> Bool {
   }
 }
 
+/// Assignment
+fileprivate extension Interpreter {
+  /// Assigns the value at `source` into `t`, destructuring literal expressions
+  /// of `t` and assigning into the lvalue subexpressions.
+  mutating func assign(
+    _ lhs: Expression, from source: Address,
+    then proceed: @escaping Next) -> Onward
+  {
+    switch lhs {
+    case .name, .index, .memberAccess:
+      let preTargetEphemeralCount = frame.ephemeralAllocations
+      return evaluate(lhs) { target, me in
+        // If target is an lvalue, we should have been able to evaluate it
+        // without new allocations.
+        sanityCheck(
+          me.frame.ephemeralAllocations == preTargetEphemeralCount,
+          "\n\(lhs.site): error: not an lvalue?")
+        me.memory.assign(from: source, into: target)
+        return Onward(proceed)
+      }
+
+    case .integerLiteral, .booleanLiteral, .unaryOperator, .binaryOperator,
+         .intType, .boolType, .typeType:
+      UNREACHABLE("Non-lvalue expressions should be ruled out by TypeChecker.")
+
+    case let .tupleLiteral(t):
+      return assign(t, from: source, then: proceed)
+
+    case let .functionCall(f):
+      return assign(f, from: source, then: proceed)
+
+    case let .functionType(t):
+      return assign(t, from: source, then: proceed)
+    }
+  }
+
+  mutating func assign(
+    _ p: FunctionCall<Expression>, from source: Address,
+    then proceed: @escaping Next) -> Onward
+  {
+    UNIMPLEMENTED()
+  }
+
+  mutating func assign(
+    _ p: FunctionTypeLiteral, from source: Address,
+    then proceed: @escaping Next) -> Onward
+  {
+    UNIMPLEMENTED()
+  }
+
+  mutating func assign(
+    _ t: TupleLiteral, from source: Address,
+    then proceed: @escaping Next) -> Onward
+  {
+    assignElements(t.fields().elements[...], from: source, then: proceed)
+  }
+
+  mutating func assignElements(
+    _ t: Tuple<Expression>.Elements.SubSequence, from source: Address,
+    then proceed: @escaping Next) -> Onward
+  {
+    guard let (k0, e0) = t.first else { return Onward(proceed) }
+
+    return assign(e0, from: source.^k0) { me in
+      me.assignElements(
+        t.dropFirst(), from: source, then: proceed)
+    }
+  }
+}
+
+/// Pattern matching
 fileprivate extension Interpreter {
   /// Matches `p` to the value at `source`, binding variables in `p` to
   /// the corresponding parts of the value, and calling `proceed` with an
@@ -925,7 +976,11 @@ func sanityCheck(
   Swift.assert(condition(), message(), file: (filePath), line: line)
 }
 
+/// Facility for the interpreter, not to be touched by other parts of the system.
 fileprivate extension TupleSyntax {
+  /// Creates a `Tuple` from `self`, requiring there be no duplicate fieldIDs.
+  ///
+  /// Duplicate fieldIDs should already have been rejected by the typechecker.
   func fields() -> Tuple<Payload> {
     var l = ErrorLog()
     let r = fields(reportingDuplicatesIn: &l)

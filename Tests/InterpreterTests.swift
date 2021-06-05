@@ -53,7 +53,7 @@ final class InterpreterTests: XCTestCase {
   }
 
   func test1() {
-    // XCTAssertEqual(run("fun1.6c", tracing: true), 0)
+    // XCTAssertEqual(run("tuple_assign.6c", tracing: true), 0)
   }
 
   func testExamples() {
@@ -98,7 +98,7 @@ final class InterpreterTests: XCTestCase {
     XCTAssertEqual(run("match_int.6c"), 0)
     XCTAssertEqual(run("match_int_default.6c"), 0)
     // XCTAssertEqual(run("match_type.6c"), 0)
-    // XCTAssertEqual(run("next.6c"), 0)
+    XCTAssertEqual(run("next.6c"), 0)
     XCTAssertEqual(run("pattern_init.6c"), 0)
     // XCTAssertEqual(run("pattern_variable_fail.6c"), 0)
     XCTAssertEqual(run("record1.6c"), 0)
@@ -113,10 +113,10 @@ final class InterpreterTests: XCTestCase {
     XCTAssertEqual(run("tuple4.6c"), 0)
     // TODO: This is now supposed to cause a type checking error?
     XCTAssertEqual(run("tuple5.6c"), 0)
-    // XCTAssertEqual(run("tuple_assign.6c"), 0)
-    // XCTAssertEqual(run("tuple_equality.6c"), 0)
-    // XCTAssertEqual(run("tuple_equality2.6c"), 0)
-    // XCTAssertEqual(run("tuple_equality3.6c"), 0)
+    XCTAssertEqual(run("tuple_assign.6c"), 0)
+    // XCTAssertEqual(run("tuple_equality.6c"), 0) // Expected type check error
+    XCTAssertEqual(run("tuple_equality2.6c"), 0)
+    // XCTAssertEqual(run("tuple_equality3.6c"), 0) // Expected type check error
     XCTAssertEqual(run("tuple_match.6c"), 0)
     XCTAssertEqual(run("tuple_match2.6c"), 0)
     XCTAssertEqual(run("tuple_match3.6c"), 0)
