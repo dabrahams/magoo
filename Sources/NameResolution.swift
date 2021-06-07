@@ -22,6 +22,9 @@ struct NameResolution {
   /// the declared entity referenced.
   private(set) var definition = ASTDictionary<Identifier, Declaration>()
 
+  /// The variables defined at global scope.
+  private(set) var globals = Set<ASTIdentity<SimpleBinding>>()
+
   /// A mapping from names to the declarations they reference in the current
   /// scope.
   private var symbolTable: StackDictionary<String, Declaration> = .init()
@@ -98,6 +101,7 @@ private extension NameResolution {
       return
     case .variable(let b):
       define(b.name, b)
+      if activeScopes.count == 1 { globals.insert(b.identity) }
     case .tuple(let t):
       defineVariables(declaredBy: t)
     case .functionCall(let f):

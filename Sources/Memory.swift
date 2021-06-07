@@ -114,6 +114,9 @@ extension Memory {
   /// - Requires: `a` is an allocated but uninitialized address.
   mutating func initialize(_ a: Address, to v: Value) {
     sanityCheck(!isInitialized(at: a), "reinitializing \(a)")
+    sanityCheck(
+      !(v is Uninitialized),
+      "attempting to write uninitialized \(v.dynamic_type)")
     sanityCheck(boundType(at: a) == v.dynamic_type,
                 "\(boundType(at: a)!) != \(v.dynamic_type)")
     allocations[a.allocation]![keyPath: a.subObject] = v

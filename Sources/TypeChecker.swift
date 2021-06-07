@@ -43,7 +43,7 @@ struct TypeChecker {
 
   /// Mapping from variable declaration to the initialization in which it is
   /// defined.
-  private var enclosingInitialization
+  private(set) var enclosingInitialization
     = ASTDictionary<SimpleBinding, Initialization>()
 
   /// Memoized result of computing the type of the expression consisting of the

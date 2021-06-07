@@ -53,7 +53,7 @@ final class InterpreterTests: XCTestCase {
   }
 
   func test1() {
-    // XCTAssertEqual(run("choice1.6c", tracing: true), 0)
+    // XCTAssertEqual(run("global_variable1.6c", tracing: true), 0)
   }
 
   func testExamples() {
@@ -83,14 +83,15 @@ final class InterpreterTests: XCTestCase {
     XCTAssertEqual(run("fun_named_params2.6c"), 0)
     XCTAssertEqual(run("fun_recur.6c"), 0)
     XCTAssertEqual(run("funptr1.6c"), 0)
-    // XCTAssertEqual(run("global_variable1.6c"), 0)
-    // XCTAssertEqual(run("global_variable2.6c"), 0)
+    XCTAssertEqual(run("global_variable1.6c"), 0)
+    XCTAssertEqual(run("global_variable2.6c"), 0)
+    // Expect a type checking error.
     // XCTAssertEqual(run("global_variable3.6c"), 0)
-    // XCTAssertEqual(run("global_variable4.6c"), 0)
+    XCTAssertEqual(run("global_variable4.6c"), 0)
     // XCTAssertEqual(run("global_variable5.6c"), 0)
-    // XCTAssertEqual(run("global_variable6.6c"), 0)
-    // XCTAssertEqual(run("global_variable7.6c"), 0)
-    // XCTAssertEqual(run("global_variable8.6c"), 0)
+    XCTAssertEqual(run("global_variable6.6c"), 0)
+    XCTAssertEqual(run("global_variable7.6c"), 0)
+    XCTAssertEqual(run("global_variable8.6c"), 0)
     XCTAssertEqual(run("if1.6c"), 0)
     XCTAssertEqual(run("if2.6c"), 0)
     XCTAssertEqual(run("if3.6c"), 0)

@@ -110,6 +110,7 @@ struct Interpreter {
   init(_ p: ExecutableProgram) {
     self.program = p
 
+
     frame = CallFrame(
       resultAddress: memory.allocate(boundTo: .int),
       onReturn: Onward { me in
@@ -525,10 +526,11 @@ fileprivate extension Interpreter {
       }
 
     case let b as SimpleBinding:
-      let source = (frame.locals[b] ?? globals[b])!
-      return destination != nil
-        ? copy(from: source, to: destination!, then: proceed)
-        : source => proceed
+      return addressOfInitialized(b) { source, me in
+        destination != nil
+          ? me.copy(from: source, to: destination!, then: proceed)
+          : source => proceed
+      }
 
     case let f as FunctionDefinition:
       let result = FunctionValue(
@@ -546,6 +548,30 @@ fileprivate extension Interpreter {
 
     default:
       UNIMPLEMENTED(d as Any)
+    }
+  }
+
+  mutating func addressOfInitialized(
+    _ variable: SimpleBinding, then proceed: @escaping Consumer<Address>
+  ) -> Onward {
+    if let a = frame.locals[variable] ?? globals[variable] {
+      return a => proceed
+    }
+    let i = program.enclosingInitialization[variable]!
+
+    // Global variables will be bound to this memory, or parts of it, so it will
+    // never be freed.
+    let rhsArea = memory.allocate(
+      boundTo: staticType[i.initializer]!, mutable: true)
+
+    return evaluate(i.initializer, into: rhsArea) { rhs, me in
+      me.match(
+        i.bindings, toValueOfType: me.staticType[i.initializer]!, at: rhs
+      ) { matched, me in
+        if matched { return me.globals[variable]! => proceed }
+        return me.error(
+          i.bindings, "Initialization pattern not matched by \(me[rhs])")
+      }
     }
   }
 
@@ -946,9 +972,10 @@ fileprivate extension Interpreter {
 
     case let .variable(b):
       if tracing {
-        print("\(b.name.site): info: binding \(self[source])\(source)")
+        print("\(b.name.site): info: binding \(self[source]) \(source)")
       }
-      frame.locals[b] = source
+      if program.globals.contains(b.identity) { globals[b] = source }
+      else { frame.locals[b] = source }
       return true => proceed
 
     case let .tuple(x):

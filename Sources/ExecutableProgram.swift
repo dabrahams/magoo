@@ -11,6 +11,9 @@ struct ExecutableProgram {
   /// A mapping from identifier to its definition.
   let definition: ASTDictionary<Identifier, Declaration>
 
+  /// The variables defined at global scope.
+  let globals: Set<ASTIdentity<SimpleBinding>>
+
   /// Mapping from expression to the static type of that expression.
   let staticType: ASTDictionary<Expression, Type>
 
@@ -19,6 +22,10 @@ struct ExecutableProgram {
 
   /// Mapping from alternative declaration to the choice in which it is defined.
   let enclosingChoice: ASTDictionary<Alternative, ChoiceDefinition>
+
+  /// Mapping from variable declaration to the initialization in which it is
+  /// defined.
+  let enclosingInitialization: ASTDictionary<SimpleBinding, Initialization>
 
   /// The type of the expression consisting of the name of each declared entity.
   let typeOfNameDeclaredBy: Dictionary<Declaration.Identity, Memo<Type>>
@@ -46,11 +53,13 @@ struct ExecutableProgram {
     let nameLookup = NameResolution(ast)
     if !nameLookup.errors.isEmpty { throw nameLookup.errors }
     self.definition = nameLookup.definition
+    self.globals = nameLookup.globals
     let typeChecking = TypeChecker(parsedProgram, nameLookup: nameLookup)
     if !typeChecking.errors.isEmpty { throw typeChecking.errors }
-    staticType = typeChecking.expressionType
-    payloadType = typeChecking.payloadType
-    enclosingChoice = typeChecking.enclosingChoice
-    typeOfNameDeclaredBy = typeChecking.typeOfNameDeclaredBy
+    self.staticType = typeChecking.expressionType
+    self.payloadType = typeChecking.payloadType
+    self.enclosingChoice = typeChecking.enclosingChoice
+    self.enclosingInitialization = typeChecking.enclosingInitialization
+    self.typeOfNameDeclaredBy = typeChecking.typeOfNameDeclaredBy
   }
 }
