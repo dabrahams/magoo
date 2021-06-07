@@ -45,7 +45,7 @@ final class ParserTests: XCTestCase {
   }
 
   func testBasic2() {
-    let p = "var Int x = 0;".checkParsed()
+    let p = "var x: Int = 0;".checkParsed()
 
     XCTAssertEqual(
       p,
@@ -63,7 +63,7 @@ final class ParserTests: XCTestCase {
   func testFunctionTypePattern() {
     // Even though the C++ implementation isn't parsing this way, Jeremy likes
     // this parse better, without parens.
-    let p = "var fnty()->Type x = 0;".checkParsed()
+    let p = "var x: fnty()->Type = 0;".checkParsed()
 
     XCTAssertEqual(
       p,
@@ -86,7 +86,7 @@ final class ParserTests: XCTestCase {
   }
 
   func testParenthesizedPattern() {
-    let p = "var fnty()->(Type x) = 0;".checkParsed()
+    let p = "var fnty()->(x: Type) = 0;".checkParsed()
 
     XCTAssertEqual(
       p,
@@ -126,9 +126,9 @@ final class ParserTests: XCTestCase {
       // Skip experimental syntax for now.
       if f.hasPrefix("experimental_") { continue }
 
-      if f.hasSuffix("_fail.6c") {
+      if f.hasSuffix("_fail.carbon") {
         let s = try! String(contentsOfFile: p)
-        XCTAssertThrowsError(try s.parsedAsCarbon(fromFile: p))
+        XCTAssertThrowsError(try s.parsedAsCarbon(fromFile: p), p)
       }
       else {
         XCTAssertNoThrow(

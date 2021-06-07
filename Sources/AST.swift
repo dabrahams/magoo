@@ -104,7 +104,7 @@ enum TypeSpecifier: AST {
 struct SimpleBinding: AST, Declaration {
   let type: TypeSpecifier
   let name: Identifier
-  var site: Site { type.site...name.site }
+  var site: Site { name.site...type.site }
 }
 
 struct FunctionCall<Argument: AST>: AST {

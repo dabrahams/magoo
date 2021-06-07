@@ -7,18 +7,18 @@ import XCTest
 final class TypeCheckNominalTypeDeclaration: XCTestCase {
 
   func testStruct() {
-    "struct X { var Int y; }".checkTypeChecks()
+    "struct X { var y: Int; }".checkTypeChecks()
   }
 
   func testStructStructMember() {
     """
-    struct X { var Int y; }
-    struct Z { var X a; }
+    struct X { var y: Int; }
+    struct Z { var a: X; }
     """.checkTypeChecks()
   }
 
   func testStructNonTypeExpression0()  {
-    "struct X { var 42 y; }".checkFailsToTypeCheck(
+    "struct X { var y: 42; }".checkFailsToTypeCheck(
       withMessage: "Not a type expression (value has type Int)")
   }
 
@@ -63,7 +63,7 @@ final class TypeCheckFunctionSignatures: XCTestCase {
   }
 
   func testOneParameter() {
-    "fn f(Int x) {}".checkTypeChecks()
+    "fn f(x: Int) {}".checkTypeChecks()
   }
 
   func testOneResult() {
@@ -75,30 +75,30 @@ final class TypeCheckFunctionSignatures: XCTestCase {
   }
 
   func testDoubleArrowIdentity() {
-    "fn f(Int x) => x;".checkTypeChecks()
+    "fn f(x: Int) => x;".checkTypeChecks()
   }
 
   func testDuplicateLabel() {
-    "fn f(.x = Int x, .x = Int y) => x;".checkFailsToTypeCheck(
+    "fn f(.x = x: Int, .x = y: Int) => x;".checkFailsToTypeCheck(
       withMessage: "Duplicate label x")
   }
 
   func testEvaluateTupleLiteral() {
-    "fn f((Int, Int) x) => (x, x);".checkTypeChecks()
+    "fn f(x: (Int, Int)) => (x, x);".checkTypeChecks()
   }
 
   func testEvaluateFunctionType() {
     """
-    fn g(Int a, Int b)->Int { return a; }
-    fn f(fnty (Int, Int)->Int x) => x;
+    fn g(a: Int, b: Int)->Int { return a; }
+    fn f(x: fnty (Int, Int)->Int) => x;
     fn h() => f(g)(3, 4);
     """.checkTypeChecks()
   }
 
   func testFunctionCallArityMismatch() {
     """
-    fn g(Int a, Int b) => a;
-    fn f(Bool x) => g(x);
+    fn g(a: Int, b: Int) => a;
+    fn f(x: Bool) => g(x);
     """.checkFailsToTypeCheck(
       withMessage:
         "argument types (Bool) do not match parameter types (Int, Int)")
@@ -106,8 +106,8 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 
   func testFunctionCallParameterTypeMismatch() {
     """
-    fn g(Int a, Int b) => a;
-    fn f(Bool x) => g(1, x);
+    fn g(a: Int, b: Int) => a;
+    fn f(x: Bool) => g(1, x);
     """.checkFailsToTypeCheck(
       withMessage:
         "argument types (Int, Bool) do not match parameter types (Int, Int)")
@@ -115,8 +115,8 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 
   func testFunctionCallLabelMismatch() {
     """
-    fn g(.first = Int a, Int b) => a;
-    fn f(Bool x) => g(.last = 1, 2);
+    fn g(.first = a: Int, b: Int) => a;
+    fn f(x: Bool) => g(.last = 1, 2);
     """.checkFailsToTypeCheck(
       withMessage:
         "argument types (.last = Int, Int) "
@@ -125,8 +125,8 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 
   func testFunctionCallLabel() {
     """
-    fn g(.first = Int a, .second = Int b) => a;
-    fn f(Bool x) => g(.first = 1, .second = 2);
+    fn g(.first = a: Int, .second = b: Int) => a;
+    fn f(x: Bool) => g(.first = 1, .second = 2);
     """.checkTypeChecks()
   }
 
@@ -155,39 +155,39 @@ final class TypeCheckFunctionSignatures: XCTestCase {
   func testSimpleTypeTypeExpressions() {
     """
     fn f() => Int;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
 
     """
     fn f() => Bool;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
 
     """
     fn f() => Type;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
 
     """
     fn f() => fnty (Int)->Int;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
 
     """
     struct X {}
     fn f() => X;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
 
     """
     choice X { Bob }
     fn f() => X;
-    fn g(Type _) => 1;
+    fn g(_: Type) => 1;
     fn h() => g(f());
     """.checkTypeChecks()
   }
@@ -255,7 +255,7 @@ final class TypeCheckFunctionSignatures: XCTestCase {
   func testTypeOfStructConstruction() {
     """
     struct X {}
-    fn f(X _) => 1;
+    fn f(_: X) => 1;
     fn g() => f(X());
     """.checkTypeChecks()
   }
@@ -283,8 +283,8 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 
   func testStructMemberAccess() {
     """
-    struct X { var Int a; var Bool b; }
-    fn f(X y) => (y.a, y.b);
+    struct X { var a: Int; var b: Bool; }
+    fn f(y: X) => (y.a, y.b);
     """.checkTypeChecks()
   }
 
@@ -300,8 +300,8 @@ final class TypeCheckFunctionSignatures: XCTestCase {
       withMessage: "tuple type (.x = Int, .y = Bool) has no field 'c'")
 
     """
-    struct X { var Int a; var Bool b; }
-    fn f(X y) => (y.a, y.c);
+    struct X { var a: Int; var b: Bool; }
+    fn f(y: X) => (y.a, y.c);
     """.checkFailsToTypeCheck(withMessage:"struct X has no member 'c'")
 
     """
@@ -318,7 +318,7 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 
   func testTuplePatternType() {
     """
-    fn f((1, Int x), Bool y) => x;
+    fn f((1, x: Int), y: Bool) => x;
     fn g() => f((1, 2), true);
     """.checkTypeChecks()
   }
@@ -326,70 +326,70 @@ final class TypeCheckFunctionSignatures: XCTestCase {
   func testFunctionCallPatternType() {
     """
     choice X { One(Int, Bool), Two }
-    fn f(X.One(Int a, Bool b), X.Two()) => b;
-    fn g(Bool _) => 1;
+    fn f(X.One(a: Int, b: Bool), X.Two()) => b;
+    fn g(_: Bool) => 1;
     fn h() => g(f(X.One(3, true), X.Two()));
     """.checkTypeChecks()
 
     """
-    struct X { var Int a; var Bool b; }
-    fn f(X(.a = Int a, .b = Bool b)) => b;
-    fn g(Bool _) => 1;
+    struct X { var a: Int; var b: Bool; }
+    fn f(X(.a = a: Int, .b = b: Bool)) => b;
+    fn g(_: Bool) => 1;
     fn h() => g(f(X(.a = 3, .b = false)));
     """.checkTypeChecks()
 
-    "fn f(Int(Bool _));".checkFailsToTypeCheck(
+    "fn f(Int(_: Bool));".checkFailsToTypeCheck(
       withMessage: "Called type must be a struct, not 'Int'")
 
     """
-    struct X { var Int a; var Bool b; }
-    fn f(X(.a = Bool a, .b = Bool b)) => b;
+    struct X { var a: Int; var b: Bool; }
+    fn f(X(.a = a: Bool, .b = b: Bool)) => b;
     """.checkFailsToTypeCheck(withMessage:
       "Argument tuple type (.a = Bool, .b = Bool) doesn't match"
         + " struct initializer type (.a = Int, .b = Bool)")
 
     """
     choice X { One(Int, Bool), Two }
-    fn f(X.One(Bool a, Bool b), X.Two()) => b;
+    fn f(X.One(a: Bool, b: Bool), X.Two()) => b;
     """.checkFailsToTypeCheck(withMessage:
       "Argument tuple type (Bool, Bool) doesn't match"
         + " alternative payload type (Int, Bool)")
 
     """
-    fn f(1(Bool _));
+    fn f(1(_: Bool));
     """.checkFailsToTypeCheck(withMessage:
       "instance of type Int is not callable")
   }
 
   func testFunctionTypePatternType() {
-    "fn f(fnty(Type x)) => 0;".checkTypeChecks()
+    "fn f(fnty(x: Type)) => 0;".checkTypeChecks()
 
-    "fn f(fnty(Type x)->Bool) => 0;".checkTypeChecks()
+    "fn f(fnty(x: Type)->Bool) => 0;".checkTypeChecks()
 
-    "fn f(fnty(Type x)->Type y) => 0;".checkTypeChecks()
+    "fn f(fnty(x: Type)->y: Type) => 0;".checkTypeChecks()
 
-    "fn f(fnty(Int)->Type y) => 0;".checkTypeChecks()
+    "fn f(fnty(Int)->y: Type) => 0;".checkTypeChecks()
 
-    "fn f(fnty(4)->Type y) => 0;".checkFailsToTypeCheck(
+    "fn f(y: fnty(4)->Type) => 0;".checkFailsToTypeCheck(
       withMessage: "Not a type expression (value has type (Int))")
 
-    "fn f(fnty(Int x)) => 0;".checkFailsToTypeCheck(
+    "fn f(fnty(x: Int)) => 0;".checkFailsToTypeCheck(
       withMessage:
         "Pattern in this context must match type values, not Int values")
 
-    "fn f(fnty(auto x)) => 0;".checkFailsToTypeCheck(
+    "fn f(fnty(x: auto)) => 0;".checkFailsToTypeCheck(
       withMessage: "No initializer available to deduce type for auto")
 
     // A tuple of types is a valid type.
-    "fn f(fnty((Type, Type) x)->Type y) => 0;".checkTypeChecks()
+    "fn f(fnty(x: (Type, Type))->y: Type) => 0;".checkTypeChecks()
 
-    "fn f(fnty((Int, Int) x)->Type y) => 0;".checkFailsToTypeCheck(
+    "fn f(fnty(x: (Int, Int))->y: Type) => 0;".checkFailsToTypeCheck(
       withMessage:
         "Pattern in this context must match type values, not (Int, Int) values")
 
     """
-    fn g(Int x) => Int;
-    fn f(fnty((Int, Int) x)->g(3)) => 0;
+    fn g(x: Int) => Int;
+    fn f(fnty(x: (Int, Int))->g(3)) => 0;
     """.checkFailsToTypeCheck(
       withMessage:
         "Pattern in this context must match type values, not (Int, Int) values")
@@ -401,109 +401,109 @@ final class TypeCheckFunctionSignatures: XCTestCase {
 final class TypeCheckTopLevelInitializations: XCTestCase {
   func testSimpleInitializer() {
     """
-    var Int x = 1;
-    var Int y = x;
+    var x: Int = 1;
+    var y: Int = x;
     """.checkTypeChecks()
 
     """
-    var Int y = x;
-    var Int x = 1;
+    var y: Int = x;
+    var x: Int = 1;
     """.checkTypeChecks()
 
     """
-    var auto x = 1;
-    var Int y = x;
+    var x: auto = 1;
+    var y: Int = x;
     """.checkTypeChecks()
 
     """
-    var Int y = x;
-    var auto x = 1;
+    var y: Int = x;
+    var x: auto = 1;
     """.checkTypeChecks()
 
     """
-    var auto x = true;
-    var Int y = x;
+    var x: auto = true;
+    var y: Int = x;
     """.checkFailsToTypeCheck(
       withMessage: "Pattern type Int does not match initializer type Bool")
   }
 
   func testTuplePatternInitializer() {
     """
-    var ((1, Int x), Bool y) = ((1, 2), true);
-    var (Int, Bool) a = (x, y);
+    var ((1, x: Int), y: Bool) = ((1, 2), true);
+    var a: (Int, Bool) = (x, y);
     """.checkTypeChecks()
 
     """
-    var ((1, Int x), auto y) = ((1, 2), true);
-    var (Int, Bool) a = (x, y);
+    var ((1, x: Int), y: auto) = ((1, 2), true);
+    var a: (Int, Bool) = (x, y);
     """.checkTypeChecks()
   }
 
   func testFunctionCallPatternInitializer() {
     """
     choice X { One(Int, Bool), Two }
-    var (X.One(Int a, Bool b), X.Two()) = (X.One(3, true), X.Two());
+    var (X.One(a: Int, b: Bool), X.Two()) = (X.One(3, true), X.Two());
     """.checkTypeChecks()
     
     """
     choice X { One(Int, Bool), Two }
-    var X.One(Int a, auto b) = X.One(3, true);
+    var X.One(a: Int, b: auto) = X.One(3, true);
     """.checkTypeChecks()
 
     """
     choice X { One(Int, (Bool, Int)), Two }
-    var (X.One(Int a, (auto b, 4)), X.Two()) = (X.One(3, (true, 4)), X.Two());
+    var (X.One(a: Int, (b: auto, 4)), X.Two()) = (X.One(3, (true, 4)), X.Two());
     """.checkTypeChecks()
 
     """
-    struct X { var Int a; var Bool b; }
-    var X(.a = Int a, .b = Bool b) = X(.a = 3, .b = false);
+    struct X { var a: Int; var b: Bool; }
+    var X(.a = a: Int, .b = b: Bool) = X(.a = 3, .b = false);
     """.checkTypeChecks()
 
     """
-    struct X { var Int a; var Bool b; }
-    var X(.a = auto a, .b = Bool b) = X(.a = 3, .b = false);
+    struct X { var a: Int; var b: Bool; }
+    var X(.a = a: auto, .b = b: Bool) = X(.a = 3, .b = false);
     """.checkTypeChecks()
 
-    "var Int(Bool _) = 1;".checkFailsToTypeCheck(
+    "var Int(_: Bool) = 1;".checkFailsToTypeCheck(
       withMessage: "Called type must be a struct, not 'Int'")
 
     """
-    struct X { var Int a; var Bool b; }
-    var X(.a = Bool a, .b = Bool b) = X(.a = 3, .b = true);
+    struct X { var a: Int; var b: Bool; }
+    var X(.a = a: Bool, .b = b: Bool) = X(.a = 3, .b = true);
     """.checkFailsToTypeCheck(withMessage:
       "Argument tuple type (.a = Bool, .b = Bool) doesn't match"
         + " struct initializer type (.a = Int, .b = Bool)")
 
     """
     choice X { One(Int, Bool), Two }
-    var (X.One(Bool a, Bool b), X.Two()) = (X.One(5, true), X.Two);
+    var (X.One(a: Bool, b: Bool), X.Two()) = (X.One(5, true), X.Two);
     """.checkFailsToTypeCheck(withMessage:
       "Argument tuple type (Bool, Bool) doesn't match"
         + " alternative payload type (Int, Bool)")
 
     """
-    var 1(Bool _) = 1;
+    var 1(_: Bool) = 1;
     """.checkFailsToTypeCheck(withMessage:
       "instance of type Int is not callable")
   }
 
   func testFunctionTypeInitializer() {
     """
-    fn g(Int _)->Bool{}
-    var fnty(Int)->Bool y = g;
+    fn g(_: Int)->Bool{}
+    var y: fnty(Int)->Bool = g;
     """.checkTypeChecks()
   }
 
   func testFunctionTypePatternInitializer() {
-    "var fnty(Type x) = fnty(Int);".checkTypeChecks()
+    "var fnty(x: Type) = fnty(Int);".checkTypeChecks()
 
-    "var fnty(Type x)->Bool = fnty(Int)->Bool;".checkTypeChecks()
+    "var fnty(x: Type)->Bool = fnty(Int)->Bool;".checkTypeChecks()
 
     // This one typechecks but will have to trap at runtime because the return
     // types don't match.
 
-    "var fnty(Type x)->Type = fnty(Int)->Int;".checkTypeChecks()
+    "var fnty(x: Type)->Type = fnty(Int)->Int;".checkTypeChecks()
 
     // Same with this one; in both cases the return type of the rhs is a runtime
     // expression.  However, we have not implemented the compile-time evaluation
@@ -513,39 +513,39 @@ final class TypeCheckTopLevelInitializations: XCTestCase {
     // compile-time.  Jeremy agrees that's a bug.
     /*
     """
-    var auto t = Int;
-    var fnty(Type x)->Type = fnty(Int)->t;
+    var t: auto = Int;
+    var fnty(x: Type)->Type = fnty(Int)->t;
     """.checkTypeChecks()
     */
 
-    "var fnty(Int)->(Type y) = fnty(Int)->Bool;".checkTypeChecks()
+    "var fnty(Int)->(y: Type) = fnty(Int)->Bool;".checkTypeChecks()
 
-    "var fnty(4)->Type y = fnty(Int)->Int;".checkFailsToTypeCheck(
+    "var y: fnty(4)->Type = fnty(Int)->Int;".checkFailsToTypeCheck(
       withMessage: "Not a type expression (value has type (Int))")
 
-    "var fnty(Int x) = fnty(Int);".checkFailsToTypeCheck(
+    "var fnty(x: Int) = fnty(Int);".checkFailsToTypeCheck(
       withMessage:
         "Pattern in this context must match type values, not Int values")
 
-    "var fnty(auto x) = 3;".checkFailsToTypeCheck(
+    "var fnty(x: auto) = 3;".checkFailsToTypeCheck(
       withMessage: "No initializer available to deduce type for auto")
 
     // A tuple of types is a valid type.
     """
-    var fnty((Type, Type) x)->Type y
+    var fnty(x: (Type, Type))->y: Type
       = fnty((Int, Int))->Bool;
     """.checkTypeChecks()
 
     """
-    var fnty((Int, Int) x)->(Type y)
+    var fnty(x: (Int, Int))->(y: Type)
       = fnty((Int, Int))->Bool;
     """.checkFailsToTypeCheck(
       withMessage:
         "Pattern in this context must match type values, not (Int, Int) values")
 
     """
-    fn g(Int x) => Int;
-    var fnty((Int, Int) x)->g(3)
+    fn g(x: Int) => Int;
+    var fnty(x: (Int, Int))->g(3)
        = fnty((Int, Int))->Bool;
     """.checkFailsToTypeCheck(
       withMessage:
@@ -553,21 +553,21 @@ final class TypeCheckTopLevelInitializations: XCTestCase {
   }
 
   func testInvalidFunctionType() {
-    "fn g(fnty(1)->Int x) => x;".checkFailsToTypeCheck(
+    "fn g(x: fnty(1)->Int) => x;".checkFailsToTypeCheck(
       withMessage: "Not a type expression (value has type (Int))")
 
-    "fn g(fnty(Int)->true x) => x;".checkFailsToTypeCheck(
+    "fn g(x: fnty(Int)->true) => x;".checkFailsToTypeCheck(
       withMessage: "Not a type expression (value has type Bool)")
   }
 
   func DO_NOT_testInitializationsRequiringSubMetatypes() {
     // These tests require interesting metatypes and subtype relationships,
     // and are not supported by the C++ implementation either.
-    "var fnty(auto x) = fnty(Int);".checkTypeChecks()
-    "var fnty(auto y)->Bool = fnty(Int)->Bool;".checkTypeChecks()
-    "var fnty(Int)->(auto z) = fnty(Int)->Bool;".checkTypeChecks()
+    "var fnty(x: auto) = fnty(Int);".checkTypeChecks()
+    "var fnty(y: auto)->Bool = fnty(Int)->Bool;".checkTypeChecks()
+    "var fnty(Int)->(z: auto) = fnty(Int)->Bool;".checkTypeChecks()
     """
-    var fnty((Type, auto z))->(Type y)
+    var fnty((Type, z: auto))->(y: Type)
       = fnty((Int, Int))->Bool;
     """.checkTypeChecks()
   }
@@ -577,8 +577,8 @@ final class TypeCheckTopLevelInitializations: XCTestCase {
     // implementation either.
     """
     struct X {}
-    var  auto t0 () = X() // a
-    var (auto t1)() = X() // b
+    var  t0: auto () = X() // a
+    var (t1: auto)() = X() // b
     """.checkTypeChecks()
   }
 }
@@ -586,27 +586,27 @@ final class TypeCheckTopLevelInitializations: XCTestCase {
 /// Tests of indexing and operator expression typechecking.
 final class TypeCheckOperatorAndIndexExpressions: XCTestCase {
   func testIndexExpression() {
-    "fn f((Int,) r) => r[0];".checkTypeChecks()
+    "fn f(r: (Int,)) => r[0];".checkTypeChecks()
 
     """
-    fn f((Int, Bool) r) => r[0];
-    fn g(Int _) => 1;
+    fn f(r: (Int, Bool)) => r[0];
+    fn g(_: Int) => 1;
     fn h() => g(f((1, false)));
     """.checkTypeChecks()
 
     """
-    fn f((Int, Bool) r) => r[1];
-    fn g(Bool _) => 1;
+    fn f(r: (Int, Bool)) => r[1];
+    fn g(_: Bool) => 1;
     fn h() => g(f((1, false)));
     """.checkTypeChecks()
 
-    "fn f(Int x) => x[0];".checkFailsToTypeCheck(
+    "fn f(x: Int) => x[0];".checkFailsToTypeCheck(
       withMessage:"Can't index non-tuple type Int")
 
-    "fn f((Int,) x) => x[Int];".checkFailsToTypeCheck(
+    "fn f(x: (Int,)) => x[Int];".checkFailsToTypeCheck(
       withMessage: "Index type must be Int, not Type")
 
-    "fn f((.x = Int, Int, Bool) r) => r[3];".checkFailsToTypeCheck(
+    "fn f(r: (.x = Int, Int, Bool)) => r[3];".checkFailsToTypeCheck(
       withMessage:
         "Tuple type (.x = Int, Int, Bool) has no value at position 3")
   }
@@ -614,13 +614,13 @@ final class TypeCheckOperatorAndIndexExpressions: XCTestCase {
   func testTypeOfUnaryOperator() {
     """
     fn f() => -3;
-    fn g(Int _) => 0;
+    fn g(_: Int) => 0;
     fn h() => g(f());
     """.checkTypeChecks("unary minus")
 
     """
     fn f() => not false;
-    fn g(Bool _) => 0;
+    fn g(_: Bool) => 0;
     fn h() => g(f());
     """.checkTypeChecks("logical not")
 
@@ -633,32 +633,32 @@ final class TypeCheckOperatorAndIndexExpressions: XCTestCase {
 
   func testTypeOfBinaryOperator() {
     """
-    fn f(Int a, Int b) => a == b;
-    fn g(Bool _) => 0;
+    fn f(a: Int, b: Int) => a == b;
+    fn g(_: Bool) => 0;
     fn h() => g(f(1, 2));
     """.checkTypeChecks()
 
     """
-    fn f(Int a, Int b) => a + b;
-    fn g(Int _) => 0;
+    fn f(a: Int, b: Int) => a + b;
+    fn g(_: Int) => 0;
     fn h() => g(f(1, 2));
     """.checkTypeChecks()
 
     """
-    fn f(Int a, Int b) => a - b;
-    fn g(Int _) => 0;
+    fn f(a: Int, b: Int) => a - b;
+    fn g(_: Int) => 0;
     fn h() => g(f(1, 2));
     """.checkTypeChecks()
 
     """
-    fn f(Bool a, Bool b) => a and b;
-    fn g(Bool _) => 0;
+    fn f(a: Bool, b: Bool) => a and b;
+    fn g(_: Bool) => 0;
     fn h() => g(f(true, false));
     """.checkTypeChecks()
 
     """
-    fn f(Bool a, Bool b) => a or b;
-    fn g(Bool _) => 0;
+    fn f(a: Bool, b: Bool) => a or b;
+    fn g(_: Bool) => 0;
     fn h() => g(f(true, false));
     """.checkTypeChecks()
   }
@@ -675,13 +675,13 @@ final class TypeCheckOperatorAndIndexExpressions: XCTestCase {
 final class TypeCheckStatements: XCTestCase {
   func testExpressionStatement() {
     """
-    fn f(Bool a, Int b) {
+    fn f(a: Bool, b: Int) {
       not a;
     }
     """.checkTypeChecks()
 
     """
-    fn f(Bool a, Int b) {
+    fn f(a: Bool, b: Int) {
       not b;
     }
     """.checkFailsToTypeCheck(
@@ -690,15 +690,15 @@ final class TypeCheckStatements: XCTestCase {
 
   func testInitialization() {
     """
-    fn f(Bool a, Int b) -> Int {
-      var auto x = b;
+    fn f(a: Bool, b: Int) -> Int {
+      var x: auto = b;
       return x;
     }
     """.checkTypeChecks()
 
     """
-    fn f(Bool a, Int b) -> Bool {
-      var Bool x = b;
+    fn f(a: Bool, b: Int) -> Bool {
+      var x: Bool = b;
       return x;
     }
     """.checkFailsToTypeCheck(
@@ -707,30 +707,30 @@ final class TypeCheckStatements: XCTestCase {
 
   func testAssignment() {
     """
-    fn f(Int b) {
-      var Int x = b;
+    fn f(b: Int) {
+      var x: Int = b;
       x = b;
     }
     """.checkTypeChecks()
 
     """
-    var Int x = 3;
-    fn f(Bool a, Int b) {
+    var x: Int = 3;
+    fn f(a: Bool, b: Int) {
       x = b;
     }
     """.checkTypeChecks()
 
     """
-    fn f(Bool a) {
-      var Int x = 3;
+    fn f(a: Bool) {
+      var x: Int = 3;
       x = a;
     }
     """.checkFailsToTypeCheck(
       withMessage: "Expected expression of type Bool, not Int")
 
     """
-    var Int x = 3;
-    fn f(Bool a) {
+    var x: Int = 3;
+    fn f(a: Bool) {
       x = a;
     }
     """.checkFailsToTypeCheck(
@@ -739,7 +739,7 @@ final class TypeCheckStatements: XCTestCase {
 
   func testIf() {
     """
-    fn f(Int b) -> Bool {
+    fn f(b: Int) -> Bool {
       if (b == 0) {
         return true;
       }
@@ -750,7 +750,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int b) -> Bool {
+    fn f(b: Int) -> Bool {
       if (b == 0) {
         return true;
       }
@@ -759,7 +759,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int b) -> Bool {
+    fn f(b: Int) -> Bool {
       if (b) {
         return true;
       }
@@ -771,7 +771,7 @@ final class TypeCheckStatements: XCTestCase {
       withMessage: "Expected expression of type Bool, not Int")
 
     """
-    fn f(Int b) -> Bool {
+    fn f(b: Int) -> Bool {
       if (b) {
         return true;
       }
@@ -781,7 +781,7 @@ final class TypeCheckStatements: XCTestCase {
       withMessage: "Expected expression of type Bool, not Int")
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       if (b == 0) {
         return b;
       }
@@ -794,7 +794,7 @@ final class TypeCheckStatements: XCTestCase {
       withMessage: "Expected expression of type Int, not Bool")
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       if (b == 0) {
         return true;
       }
@@ -806,7 +806,7 @@ final class TypeCheckStatements: XCTestCase {
 
   func testWhile() {
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (not (b == 0)) {
         b = b - 1;
       }
@@ -815,7 +815,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (b) {
         b = b - 1;
       }
@@ -825,7 +825,7 @@ final class TypeCheckStatements: XCTestCase {
       withMessage: "Expected expression of type Bool, not Int")
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (b) {
         b = not b;
       }
@@ -837,7 +837,7 @@ final class TypeCheckStatements: XCTestCase {
 
   func testMatch() {
     """
-    fn f(Int x) -> Int {
+    fn f(x: Int) -> Int {
       match (x) {
         case 5 =>
           return 0;
@@ -848,7 +848,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int x) -> Int {
+    fn f(x: Int) -> Int {
       match (x) {
         case (Int, Int) =>
           return 0;
@@ -861,7 +861,7 @@ final class TypeCheckStatements: XCTestCase {
         + " with matched expression type Int")
 
     """
-    fn f(Int x) -> Int {
+    fn f(x: Int) -> Int {
       match (x) {
         case 5 =>
           return (false, false);
@@ -875,7 +875,7 @@ final class TypeCheckStatements: XCTestCase {
 
   func testBreak() {
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (not (b == 0)) {
         b = b - 1;
         if (b == 4) { break; }
@@ -885,7 +885,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (not (b == 0)) {
         b = b - 1;
       }
@@ -898,7 +898,7 @@ final class TypeCheckStatements: XCTestCase {
 
   func testContinue() {
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (not (b == 0)) {
         b = b - 1;
         if (b == 4) { continue; }
@@ -908,7 +908,7 @@ final class TypeCheckStatements: XCTestCase {
     """.checkTypeChecks()
 
     """
-    fn f(Int b) -> Int {
+    fn f(b: Int) -> Int {
       while (not (b == 0)) {
         b = b - 1;
       }
@@ -933,7 +933,7 @@ final class TypeCheckExamples: XCTestCase {
       if f.hasPrefix("experimental_") { continue }
 
       let source = try String(contentsOfFile: sourcePath)
-      if f.contains("pattern_variable_fail.6c") || f.contains("tuple2_fail"){
+      if f.contains("pattern_variable_fail.carbon") || f.contains("tuple2_fail"){
         XCTAssertThrowsError(try source.parsedAsCarbon(fromFile: sourcePath))
       }
       else if f.contains("type_compute") {
@@ -943,7 +943,7 @@ final class TypeCheckExamples: XCTestCase {
                 || source.contains("Error expected.")
       // This file's error is about declaration order dependency, which we don't
       // enforce.
-                && !f.contains("global_variable8.6c")
+                && !f.contains("global_variable8.carbon")
       {
         source.checkFailsToTypeCheck(fromFile: sourcePath, withMessage: "")
       } else {

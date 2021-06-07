@@ -6,14 +6,14 @@ import XCTest
 
 final class TestSemanticAnalysis: XCTestCase {
   func testNoMain() {
-    guard let executable = "var Int x = 3;".checkExecutable() else { return }
+    guard let executable = "var x: Int = 3;".checkExecutable() else { return }
     XCTAssertNil(executable.main)
   }
       
   func testMultiMain() {
     let source = """
       fn main() -> Int {}
-      var Int x = 3;
+      var x: Int = 3;
       fn main() -> Void {}
       """
     checkThrows(try ExecutableProgram(source.parsedAsCarbon()))
