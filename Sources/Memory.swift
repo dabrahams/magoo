@@ -115,8 +115,7 @@ extension Memory {
   mutating func initialize(_ a: Address, to v: Value) {
     sanityCheck(allocations[a.allocation] != nil)
     sanityCheck(
-      !isInitialized(at: a),
-      "reinitializing \(a) (currently \(allocations[a.allocation]!))")
+      !isInitialized(at: a), "reinitializing \(a) (currently \(self[a]))")
     sanityCheck(
       v.isInitialized,
       "initialization source is uninitialized \(v.dynamic_type)")
@@ -189,6 +188,7 @@ extension Memory {
   }
 }
 
+/// Uninitialized storage.
 extension Memory {
   private static let uninitializedTypeSite = ASTSite(
     devaluing: SourceRegion(
@@ -196,7 +196,7 @@ extension Memory {
       SourcePosition(line: -1, column: -1)
         ..< SourcePosition(line: -1, column: -1)))
 
-  fileprivate static let uninitializedType = Type.struct(
+  static let uninitializedType = Type.struct(
     ASTIdentity(
       of: StructDefinition(
         name: Identifier(

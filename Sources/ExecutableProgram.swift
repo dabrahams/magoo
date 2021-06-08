@@ -46,16 +46,24 @@ struct ExecutableProgram {
     return candidates[0]
   }
 
-  /// Constructs an instance for the given parser output, or throws `ErrorLog`
-  /// if the program is ill-formed.
+  /// Creates an instance for the given parser output, or throws `ErrorLog` if
+  /// the program is ill-formed.
   init(_ parsedProgram: AbstractSyntaxTree) throws {
-    self.ast = parsedProgram
-    let nameLookup = NameResolution(ast)
+    let nameLookup = NameResolution(parsedProgram)
     if !nameLookup.errors.isEmpty { throw nameLookup.errors }
-    self.definition = nameLookup.definition
-    self.globals = nameLookup.globals
     let typeChecking = TypeChecker(parsedProgram, nameLookup: nameLookup)
     if !typeChecking.errors.isEmpty { throw typeChecking.errors }
+    self.init(parsedProgram, nameLookup: nameLookup, typeChecking: typeChecking)
+  }
+
+  /// Creates an instance for expression evaluation during typechecking.
+  init(
+    _ parsedProgram: AbstractSyntaxTree,
+    nameLookup: NameResolution, typeChecking: TypeChecker
+  ) {
+    self.ast = parsedProgram
+    self.definition = nameLookup.definition
+    self.globals = nameLookup.globals
     self.staticType = typeChecking.expressionType
     self.payloadType = typeChecking.payloadType
     self.enclosingChoice = typeChecking.enclosingChoice

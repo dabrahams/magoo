@@ -10,6 +10,14 @@ enum FieldID: Hashable {
   case label(Identifier)
   /// field identified by its offset in the sequence of positional fields.
   case position(Int)
+
+  var label: Identifier? {
+    if case let .label(id) = self { return id } else { return nil }
+  }
+
+  var position: Int? {
+    if case let .position(n) = self { return n } else { return nil }
+  }
 }
 
 /// A tuple value (or type, which is also a tuple value) of the given `Field`.

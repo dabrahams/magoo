@@ -214,7 +214,8 @@ extension String {
     _ message: @autoclosure () -> String = "",
     filePath: StaticString = #filePath,
     line: UInt = #line, column: Int = #column,
-    topLevelCheckFunction: StaticString? = nil
+    topLevelCheckFunction: StaticString? = nil,
+    tracing: Bool = false
   ) -> ErrorLog?
   {
     guard let (parsedProgram, nameLookup) = self.checkNameResolution(
@@ -223,7 +224,8 @@ extension String {
             topLevelCheckFunction: topLevelCheckFunction ?? #function
           ) else { return nil }
 
-    let typeChecker = TypeChecker(parsedProgram, nameLookup: nameLookup)
+    let typeChecker = TypeChecker(
+      parsedProgram, nameLookup: nameLookup, tracing: tracing)
     return typeChecker.errors
   }
 
@@ -247,12 +249,14 @@ extension String {
     _ message: @autoclosure () -> String = "",
     filePath: StaticString = #filePath,
     line: UInt = #line, column: Int = #column,
-    topLevelCheckFunction: StaticString? = nil
+    topLevelCheckFunction: StaticString? = nil,
+    tracing: Bool = false
   ) {
     if let errors = self.typeCheckingErrors(
          fromFile: sourceFile,
          filePath: filePath, line: line, column: column,
-         topLevelCheckFunction: topLevelCheckFunction ?? #function),
+         topLevelCheckFunction: topLevelCheckFunction ?? #function,
+         tracing: tracing),
        !errors.isEmpty
     {
       failWithUnexpectedErrors(
@@ -282,11 +286,13 @@ extension String {
     fromFile sourceFile: String? = nil,
     withMessage excerpt: String,
     filePath: StaticString = #filePath,
-    line: UInt = #line, column: Int = #column
+    line: UInt = #line, column: Int = #column,
+    tracing: Bool = false
   ) {
     guard let errors = self.typeCheckingErrors(
             fromFile: sourceFile,
-            filePath: filePath, line: line, column: #column),
+            filePath: filePath, line: line, column: #column,
+            tracing: tracing),
           !(errors.contains { e in
               excerpt.isEmpty // Work around wrong semantics of Foundation.
                 || e.message.contains(excerpt) })

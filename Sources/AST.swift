@@ -271,6 +271,10 @@ struct TupleSyntax<Payload: AST>: AST {
     self.site = site
   }
 
+  func map<Other: AST>(_ transform: (Payload)->Other) -> TupleSyntax<Other> {
+    .init(elements.map { .init(label: $0.label, transform($0.payload)) }, site)
+  }
+
   let elements: [Element]
   let site: Site
 }

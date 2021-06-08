@@ -361,6 +361,15 @@ final class TypeCheckFunctionSignatures: XCTestCase {
       "instance of type Int is not callable")
   }
 
+  func DO_NOT_test1Type() {
+    // It's useful to have an isolated test case that you can plug a failing
+    // example into, especially if you're debugging.  Remove DO_NOT_ to enable.
+    "fn f(fnty(x: Int)) => 0;".checkFailsToTypeCheck(
+      withMessage:
+        "Pattern in this context must match type values, not Int values",
+      tracing: true)
+  }
+
   func testFunctionTypePatternType() {
     "fn f(fnty(x: Type)) => 0;".checkTypeChecks()
 
@@ -921,6 +930,17 @@ final class TypeCheckStatements: XCTestCase {
 }
 
 final class TypeCheckExamples: XCTestCase {
+  func DO_NOT_test1Type() throws {
+    let testdata =
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("testdata")
+
+    let sourcePath = testdata.appendingPathComponent("funptr1.carbon").path
+    let source = try String(contentsOfFile: sourcePath)
+    // source.checkFailsToTypeCheck(fromFile: sourcePath, withMessage: "")
+    source.checkTypeChecks(fromFile: sourcePath, tracing: true)
+  }
+
   func testExamples() throws {
     let testdata =
         URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -935,9 +955,6 @@ final class TypeCheckExamples: XCTestCase {
       let source = try String(contentsOfFile: sourcePath)
       if f.contains("pattern_variable_fail.carbon") || f.contains("tuple2_fail"){
         XCTAssertThrowsError(try source.parsedAsCarbon(fromFile: sourcePath))
-      }
-      else if f.contains("type_compute") {
-        // Skip for now; we don't handle nontrivial type computation.
       }
       else if f.contains("_fail")
                 || source.contains("Error expected.")

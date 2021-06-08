@@ -11,7 +11,7 @@ final class InterpreterTests: XCTestCase {
     }
 
     var engine = Interpreter(exe)
-    XCTAssertEqual(0, engine.run())
+    XCTAssertEqual(0, engine.run() as? Int)
   }
 
   func testMinimal1() {
@@ -20,21 +20,21 @@ final class InterpreterTests: XCTestCase {
     }
 
     var engine = Interpreter(exe)
-    XCTAssertEqual(42, engine.run())
+    XCTAssertEqual(42, engine.run() as? Int)
   }
 
   func testExpressionStatement1() {
     guard let exe = "fn main() -> Int { 777; return 42; }".checkExecutable()
     else { return }
     var engine = Interpreter(exe)
-    XCTAssertEqual(42, engine.run())
+    XCTAssertEqual(42, engine.run() as? Int)
   }
 
   func testExpressionStatement2() {
     guard let exe = "fn main() -> Int { var x: Int = 777; x + 1; return 42; }".checkExecutable()
     else { return }
     var engine = Interpreter(exe)
-    XCTAssertEqual(42, engine.run())
+    XCTAssertEqual(42, engine.run() as? Int)
   }
 
   func run(_ testFile: String, tracing: Bool = false) -> Int? {
@@ -45,15 +45,17 @@ final class InterpreterTests: XCTestCase {
     let sourcePath = testdata.appendingPathComponent(testFile).path
     let source = try! String(contentsOfFile: sourcePath)
 
+    // Useful during testing to see which test file is failing.
+    // print("running", sourcePath)
     guard let program = source.checkExecutable(fromFile: sourcePath)
     else { return nil }
     var engine = Interpreter(program)
     engine.tracing = tracing
-    return engine.run()
+    return engine.run() as? Int
   }
 
-  func test1() {
-    // XCTAssertEqual(run("global_variable1.carbon", tracing: true), 0)
+  func DO_NOT_test1Interpreter() {
+    // XCTAssertEqual(run("funptr1.carbon"), 0)
   }
 
   func testExamples() {
@@ -88,6 +90,7 @@ final class InterpreterTests: XCTestCase {
     // Expect a type checking error.
     // XCTAssertEqual(run("global_variable3.carbon"), 0)
     XCTAssertEqual(run("global_variable4.carbon"), 0)
+    // Expect a type checking error.
     // XCTAssertEqual(run("global_variable5.carbon"), 0)
     XCTAssertEqual(run("global_variable6.carbon"), 0)
     XCTAssertEqual(run("global_variable7.carbon"), 0)
@@ -121,9 +124,9 @@ final class InterpreterTests: XCTestCase {
     XCTAssertEqual(run("tuple_match.carbon"), 0)
     XCTAssertEqual(run("tuple_match2.carbon"), 0)
     XCTAssertEqual(run("tuple_match3.carbon"), 0)
-    // XCTAssertEqual(run("type_compute.carbon"), 0)
-    // XCTAssertEqual(run("type_compute2.carbon"), 0)
-    // XCTAssertEqual(run("type_compute3.carbon"), 0)
+    XCTAssertEqual(run("type_compute.carbon"), 0)
+    XCTAssertEqual(run("type_compute2.carbon"), 0)
+    XCTAssertEqual(run("type_compute3.carbon"), 0)
     XCTAssertEqual(run("while1.carbon"), 0)
     XCTAssertEqual(run("zero.carbon"), 0)
   }

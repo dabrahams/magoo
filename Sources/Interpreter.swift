@@ -97,7 +97,13 @@ struct Interpreter {
   fileprivate var errors: ErrorLog = []
 
   /// True iff we are printing an evaluation trace to stdout
-  public var tracing: Bool = false
+  public var tracing: Bool {
+    get { traceLevel != nil }
+    set { traceLevel = newValue ? traceLevel ?? 0 : nil }
+  }
+
+  /// If tracing, the indent level for logging.
+  public var traceLevel: Int? = nil
 
   /// Mapping from expression to its static type.
   fileprivate var staticType: ASTDictionary<Expression, Type> {
@@ -109,7 +115,6 @@ struct Interpreter {
   /// - Requires: `p.main != nil`
   init(_ p: ExecutableProgram) {
     self.program = p
-
 
     frame = CallFrame(
       resultAddress: memory.allocate(boundTo: .int),
@@ -123,12 +128,33 @@ struct Interpreter {
     }
   }
 
-  /// Runs the program to completion and returns the exit code, if any.
-  mutating func run() -> Int? {
+  /// Runs the program to completion and returns the result value, if any.
+  mutating func run() -> Value? {
     while step() {}
-    return memory[frame.resultAddress] as? Int
+    return memory[frame.resultAddress]
+  }
+
+  /// Creates an instance that evaluates `e` in the context of `ast`
+  /// during `typeChecking`, in the context of the given `resolvedNames`.
+  init(
+    evaluating e: Expression, in parsedProgram: AbstractSyntaxTree,
+    whileInProgress typeChecking: TypeChecker, resolvedNames: NameResolution
+  ) {
+    self.program = ExecutableProgram(
+      parsedProgram, nameLookup: resolvedNames, typeChecking: typeChecking)
+
+    frame = CallFrame(
+      resultAddress: memory.allocate(boundTo: program.staticType[e]!),
+      onReturn: Onward { me in
+        fatalError("return in expression should be ruled out by parser")
+      })
+
+    nextStep = Onward { me in
+      me.evaluate(e, into: me.frame.resultAddress) { _, me in me.terminate() }
+    }
   }
 }
+
 
 fileprivate extension Interpreter {
   /// Advances execution by one unit of work, returning `true` iff the program
@@ -158,6 +184,19 @@ fileprivate extension Interpreter {
     return terminate()
   }
 
+  mutating func trace<Subject: AST>(
+    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0
+  ) {
+    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+  }
+
+  func trace<Subject: AST>(
+    _ subject: Subject, _ message: @autoclosure ()->String
+  ) {
+    var t = traceLevel
+    trace_(subject.site, message(), indent: 0, level: &t)
+  }
+
   /// Accesses the value in `memory` at `a`, or halts the interpreted program
   /// with an error if `a` is not an initialized address, returning Type.error.
   subscript(a: Address) -> Value {
@@ -176,9 +215,7 @@ fileprivate extension Interpreter {
   /// rest of executing `s` (if any), and whatever follows that, into the
   /// returned `Onward`.
   mutating func run(_ s: Statement, then proceed: @escaping Next) -> Onward {
-    if tracing {
-      print("\(s.site): info: running statement")
-    }
+    trace(s, "running statement")
     sanityCheck(
       frame.ephemeralAllocations.isEmpty,
       "leaked \(frame.ephemeralAllocations)")
@@ -190,14 +227,12 @@ fileprivate extension Interpreter {
       }
 
     case let .assignment(target: t, source: s, _):
-        return evaluate(s) { source, me in
-          if me.tracing {
-            print("\(t.site): info: assigning \(me[source]) from \(source)")
-          }
-          return me.assign(t, from: source) { me in
-            me.deleteAnyEphemeral(at: source, then: proceed)
-          }
+      return evaluate(s) { source, me in
+        me.trace(t, "assigning \(me[source]) from \(source)")
+        return me.assign(t, from: source) { me in
+          me.deleteAnyEphemeral(at: source, then: proceed)
         }
+      }
 
     case let .initialization(i):
       // Storage must be allocated for the initializer value even if it's an
@@ -336,11 +371,9 @@ fileprivate extension Interpreter {
   {
     let t = staticType[e]!
     let a = memory.allocate(boundTo: t, mutable: mutable)
-    if tracing {
-      print(
-        "\(e.site): info: allocated \(a) bound to \(t)"
-          + " (\(persist ? "persistent" : "ephemeral"))")
-    }
+    trace(
+      e,
+      "allocated \(a) bound to \(t) (\(persist ? "persistent" : "ephemeral"))")
     if persist {
       frame.persistentAllocations.push(a)
     }
@@ -460,12 +493,10 @@ fileprivate extension Interpreter {
     _ e: Expression, asCallee: Bool = false, into destination: Address? = nil,
     then proceed_: @escaping Consumer<Address>) -> Onward
   {
-    if tracing {
-      print(
-        "\(e.site): info: evaluating "
-          + (asCallee ? "as callee " : "")
-          + (destination != nil ? "into \(destination!)" : ""))
-    }
+    trace(
+      e, "evaluating " + (asCallee ? "as callee " : "")
+           + (destination != nil ? "into \(destination!)" : ""))
+
     let proceed = !tracing ? proceed_
       : { a, me in
         print("\(e.site): info: result = \(me[a])")
@@ -492,18 +523,56 @@ fileprivate extension Interpreter {
           return me.initialize(result, to: r, then: proceed)
         case let .booleanLiteral(r, _):
           return me.initialize(result, to: r, then: proceed)
+
         case let .tupleLiteral(t):
-          return me.evaluateTuple(t.elements[...], into: result, then: proceed)
+          return me.initialize(
+            result,
+            to: me.staticType[e]!.tuple!.mapFields {
+              me.memory.uninitialized($0)
+            })
+          { _, me in
+            me.evaluateTupleElements(
+              t.fields().elements[...], into: result, then: proceed)
+          }
+
         case let .unaryOperator(x):
           return me.evaluate(x, into: result, then: proceed)
         case let .binaryOperator(x):
           return me.evaluate(x, into: result, then: proceed)
         case let .functionCall(x):
           return me.evaluate(x, into: result, then: proceed)
-        case .intType, .boolType, .typeType:
-          UNIMPLEMENTED()
+        case .intType:
+          return me.initialize(result, to: Type.int, then: proceed)
+        case .boolType:
+          return me.initialize(result, to: Type.bool, then: proceed)
+        case .typeType:
+          return me.initialize(result, to: Type.type, then: proceed)
         case let .functionType(f):
-          UNIMPLEMENTED(f)
+          // Create a partially initialized function type in memory, then
+          // evaluate its parts into the corresponding memory locations.
+          let parameterTypes = TupleLiteral(f.parameters)
+          let parameterTypeTypes = me.staticType[.tupleLiteral(parameterTypes)]!
+
+          let partialValue = Type.function(
+            .init(
+              parameterTypes: parameterTypeTypes
+                .tuple!.mapFields { _ in Memory.uninitializedType },
+              returnType: Memory.uninitializedType))
+
+          return me.initialize(result, to: partialValue) { _, me in
+            me.evaluateTupleElements(
+              parameterTypes.fields().elements[...],
+              into: result.addresseePart(
+                \Type.function!.parameterTypes.upcastToValue, ".parameterTypes")
+            ) { _, me in
+              me.evaluate(
+                f.returnType.body,
+                into: result.addresseePart(
+                  \Type.function!.returnType.upcastToValue, ".returnType")
+              ) { _, me in result => proceed }
+            }
+          }
+
         case .name, .memberAccess, .index:
           UNREACHABLE()
         }
@@ -819,36 +888,21 @@ fileprivate extension Interpreter {
     }
   }
 
-  /// Evaluates `e` into `output` and passes the address of the result on to
-  /// `proceed`.
-  mutating func evaluateTuple(
-    _ e: ArraySlice<TupleLiteral.Element>,
+  /// Evaluates `e` into the elements of partially-formed tuple in `output`, and
+  /// passes the address of the result on to `proceed`.
+  mutating func evaluateTupleElements(
+    _ e: Tuple<Expression>.Elements.SubSequence,
     into output: Address,
-    parts: [FieldID: Address] = [:],
     positionalCount: Int = 0,
     then proceed: @escaping Consumer<Address>) -> Onward
   {
-    // FIXME: too many copies
-    if e.isEmpty {
-      return initialize(output, to: Tuple(parts).mapFields { self[$0] })
-      { output, me in
-        me.deleteAnyEphemerals(at: parts.values) { me in
-          proceed(output, &me)
-        }
-      }
-    }
-    else {
-      let e0 = e.first!
-      return evaluate(e0.payload) { payload, me in
-        let key: FieldID = e0.label.map { .label($0) }
-          ?? .position(positionalCount)
-        var p = parts
-        p[key] = payload
-        return me.evaluateTuple(
-          e.dropFirst(), into: output, parts: p,
-          positionalCount: positionalCount + (e0.label == nil ? 1 : 0),
-          then: proceed)
-      }
+    if e.isEmpty { return proceed(output, &self) }
+    let e0 = e.first!
+    return evaluate(e0.value, into: output.^e0.key) { _, me in
+      me.evaluateTupleElements(
+        e.dropFirst(), into: output,
+        positionalCount: positionalCount + (e0.key.position != nil ? 1 : 0),
+        then: proceed)
     }
   }
 }
@@ -958,9 +1012,7 @@ fileprivate extension Interpreter {
     toValueOfType sourceType: Type, at source: Address,
     then proceed: @escaping Consumer<Bool>) -> Onward
   {
-    if tracing {
-      print("\(p.site): info: matching against value \(self[source])")
-    }
+    trace(p, "matching against value \(self[source])")
     switch p {
     case let .atom(t):
       return evaluate(t) { target, me in
@@ -971,9 +1023,7 @@ fileprivate extension Interpreter {
       }
 
     case let .variable(b):
-      if tracing {
-        print("\(b.name.site): info: binding \(self[source]) \(source)")
-      }
+      trace(b.name, "binding \(self[source]) \(source)")
       if program.globals.contains(b.identity) { globals[b] = source }
       else { frame.locals[b] = source }
       return true => proceed

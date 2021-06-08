@@ -5,8 +5,13 @@
 /// The type-checking algorithm and associated data.
 struct TypeChecker {
   /// Type-checks `parsedProgram` given its name resolution results.
-  init(_ parsedProgram: AbstractSyntaxTree, nameLookup: NameResolution) {
-    self.definition = nameLookup.definition
+  init(
+    _ parsedProgram: AbstractSyntaxTree, nameLookup: NameResolution,
+    tracing: Bool = false
+  ) {
+    self.ast = parsedProgram
+    self.nameLookup = nameLookup
+    self.traceLevel = tracing ? 0 : nil
 
     // Create "external parent links" for the AST in our parentXXX properties.
     for d in parsedProgram { registerParentage(in: d) }
@@ -30,9 +35,11 @@ struct TypeChecker {
     }
   }
 
+  /// The results of parsing.
+  private let ast: AbstractSyntaxTree
 
-  // Mapping from names to their definitions
-  private let definition: ASTDictionary<Identifier, Declaration>
+  /// The results of name resolution.
+  private let nameLookup: NameResolution
 
   /// The static type of each expression
   private(set) var expressionType = ASTDictionary<Expression, Type>()
@@ -66,11 +73,39 @@ struct TypeChecker {
   /// True iff currently checking the body of a loop.
   private var inLoop: Bool = false
 
-  /// True iff tracing output
-  public var tracing: Bool = false
+  /// If tracing, the indent level for logging.
+  private var traceLevel: Int?
 
   /// A record of the errors encountered during type-checking.
   var errors: ErrorLog = []
+}
+
+func indentation(_ n: Int) -> String {
+  String(repeating: " ", count: n * 2)
+}
+
+func trace_(
+  _ site: ASTSite, _ message: @autoclosure ()->String,
+  indent: Int, level: inout Int?
+) {
+  guard let n = level else { return }
+  if indent < 0 { level = n + indent }
+  print("\(site): info:\n\(indentation(level!))\(message())")
+  if indent > 0 { level = n + indent }
+}
+
+private extension TypeChecker {
+  mutating func trace<Subject: AST>(
+    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0
+  ) {
+    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+  }
+
+  mutating func trace(
+    _ subject: Declaration, _ message: @autoclosure ()->String, indent: Int = 0
+  ) {
+    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+  }
 }
 
 /// Diagnostic utilities.
@@ -82,7 +117,7 @@ private extension TypeChecker {
     _ offender: Node, _ message: String , notes: [CarbonError.Note] = []
   ) -> Type {
     let e = CarbonError(message, at: offender.site, notes: notes)
-    if tracing { print(e) }
+    if traceLevel != nil { print(e) }
     errors.append(e)
     return .error
   }
@@ -164,16 +199,26 @@ private extension TypeChecker {
     return Type(value(e.body, checkType: false))!
   }
 
+// Change to "#if true // !NO_COMPILE_TIME_COMPUTE" to prevent use of the
+// interpreter for type evaluation.  Obviously, some examples will fail.
+#if !NO_COMPILE_TIME_COMPUTE
   /// Returns the compile-time value of `e` (typechecking it too iff `checkType
   /// == true`) or logs an error if `e` can't be evaluated at compile-time.
   mutating func value(_ e: Expression, checkType: Bool = true) -> Value {
     if checkType { _ = type(e) }
 
-    // Temporarily evaluating the easy subset of type expressions until we have
-    // an interpreter.
+    var evaluator = Interpreter(
+      evaluating: e, in: ast, whileInProgress: self, resolvedNames: nameLookup)
+    evaluator.traceLevel = traceLevel
+    return evaluator.run()!
+  }
+#else
+  mutating func value(_ e: Expression, checkType: Bool = true) -> Value {
+    // Just evaluate the easy subset of type expressions to avoid depending on
+    // the interpreter.
     switch e {
     case let .name(v):
-      if let r = Type(definition[v]!) {
+      if let r = Type(nameLookup.definition[v]!) {
         return r
       }
       UNIMPLEMENTED()
@@ -207,6 +252,7 @@ private extension TypeChecker {
         .init(parameterTypes: p, returnType: value(f.returnType)))
     }
   }
+#endif
 }
 
 private extension TypeChecker {
@@ -223,7 +269,7 @@ private extension TypeChecker {
       return t
     case nil: ()
     }
-    if tracing { print("\(d.site): info: \(#function)") }
+    trace(d, "\(#function) = ...", indent: +1)
     typeOfNameDeclaredBy[d.identity] = .beingComputed
 
     let r: Type
@@ -257,7 +303,7 @@ private extension TypeChecker {
 
     // memoize the result.
     typeOfNameDeclaredBy[d.identity] = .final(r)
-    if tracing { print("\(d.site): info: \(#function) = \(r)") }
+    trace(d, "\(#function) = \(r)", indent: -1)
     return r
   }
 
@@ -306,19 +352,22 @@ private extension TypeChecker {
   ///   of a function call expression.
   mutating func type(_ e: Expression, isCallee: Bool = false) -> Type {
     if let r = expressionType[e] { return r }
-    if tracing { print("\(e.site): info: type") }
+    trace(e, "type(_:isCallee: \(isCallee)) = ...", indent: +1)
 
     func rawResult() -> Type {
       switch e {
       case .name(let v):
-        return typeOfName(declaredBy: definition[v]!)
+        return typeOfName(declaredBy: nameLookup.definition[v]!)
 
       case let .functionType(f):
         let p = value(TypeExpression(f.parameters))
         if p != .error { assert(p.tuple != nil) }
-        _ = value(f.returnType)
-        return .type
 
+        let r = value(f.returnType)
+        // Returning .type unconditionally may prevent some false diagnostics,
+        // but it also sends the system down a path that asserts in the
+        // interpreter when evaluating type expressions. TODO: investigate.
+        return p == .error || r == .error ? .error : .type
 
       case let .index(target: base, offset: index, _):
         let baseType = type(base)
@@ -355,7 +404,7 @@ private extension TypeChecker {
       r = .choice(enclosingChoice[a.structure]!.identity)
     }
 
-    if tracing { print("\(e.site): info: type = \(r)") }
+    trace(e, "type(_:isCallee: \(isCallee)) = \(r)", indent: -1)
     expressionType[e] = r
     return r
   }
@@ -486,7 +535,7 @@ private extension TypeChecker {
   mutating func patternType(
     _ p: Pattern, initializerType rhs: Type? = nil) -> Type
   {
-    if tracing { print("\(p.site): info: pattern type") }
+    trace(p, "pattern type")
 
     switch (p) {
     case let .atom(e):
@@ -629,7 +678,7 @@ private extension TypeChecker {
 
   /// Typechecks `s`.
   mutating func check(_ s: Statement) {
-    if tracing { print("\(s.site): info: check(_:Statement)") }
+    trace(s, "check(_:Statement)")
     switch s {
     case let .expressionStatement(e, _):
       _ = type(e)
