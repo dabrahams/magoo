@@ -187,11 +187,4 @@ struct AlternativeValue: AtomicValue {
   var dynamic_type: Type { .alternative(dynamic_type_) }
 }
 
-/// The Swift representation of uninitialized Carbon values.
-struct Uninitialized: AtomicValue {
-  init(_ dynamic_type: Type) { self.dynamic_type = dynamic_type }
-
-  let dynamic_type: Type
-}
-
 // TODO: Alternative => AlternativeDefinition?

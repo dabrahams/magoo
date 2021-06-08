@@ -101,7 +101,7 @@ extension Memory {
   ///   will be allowed.
   mutating func allocate(boundTo t: Type, mutable: Bool = false) -> Address {
     defer { nextAllocation += 1 }
-    allocations[nextAllocation] = Uninitialized(t)
+    allocations[nextAllocation] = uninitialized(t)
     if mutable { mutableAllocations.insert(nextAllocation) }
     return Address(
       allocation: nextAllocation, subObject: \.self,
@@ -113,10 +113,14 @@ extension Memory {
   /// - Note: initialization is not considered a mutation of `a`'s value.
   /// - Requires: `a` is an allocated but uninitialized address.
   mutating func initialize(_ a: Address, to v: Value) {
-    sanityCheck(!isInitialized(at: a), "reinitializing \(a)")
+    sanityCheck(allocations[a.allocation] != nil)
     sanityCheck(
-      !(v is Uninitialized),
-      "attempting to write uninitialized \(v.dynamic_type)")
+      !isInitialized(at: a),
+      "reinitializing \(a) (currently \(allocations[a.allocation]!))")
+    sanityCheck(
+      v.isInitialized,
+      "initialization source is uninitialized \(v.dynamic_type)")
+
     sanityCheck(boundType(at: a) == v.dynamic_type,
                 "\(boundType(at: a)!) != \(v.dynamic_type)")
     allocations[a.allocation]![keyPath: a.subObject] = v
@@ -129,7 +133,7 @@ extension Memory {
   mutating func deinitialize(_ a: Address) {
     sanityCheck(isInitialized(at: a))
     allocations[a.allocation]![keyPath: a.subObject]
-      = Uninitialized(boundType(at: a)!)
+      = uninitialized(boundType(at: a)!)
   }
 
   /// Deallocates the storage at `a`.
@@ -171,7 +175,7 @@ extension Memory {
 extension Memory {
   /// Returns `true` iff `a` has been initialized with a value.
   private func isInitialized(at a: Address) -> Bool {
-    !(allocations[a.allocation]![keyPath: a.subObject] is Uninitialized)
+    allocations[a.allocation]![keyPath: a.subObject].isInitialized
   }
 
   /// Returns `true` iff `a` was allocated as mutable.
@@ -182,5 +186,42 @@ extension Memory {
   /// Returns the type to which `a` was bound at allocation.
   private func boundType(at a: Address) -> Type? {
     allocations[a.allocation]![keyPath: a.subObject].dynamic_type
+  }
+}
+
+extension Memory {
+  private static let uninitializedTypeSite = ASTSite(
+    devaluing: SourceRegion(
+      fileName: "<uninitialized type>",
+      SourcePosition(line: -1, column: -1)
+        ..< SourcePosition(line: -1, column: -1)))
+
+  fileprivate static let uninitializedType = Type.struct(
+    ASTIdentity(
+      of: StructDefinition(
+        name: Identifier(
+          text: "<<uninitialized type>>",
+          site: uninitializedTypeSite),
+        members: [],
+        site: uninitializedTypeSite
+      )))
+
+  /// The Swift representation of uninitialized Carbon non-type values.
+  fileprivate struct UninitializedValue: AtomicValue {
+    init(_ dynamic_type: Type) { self.dynamic_type = dynamic_type }
+
+    let dynamic_type: Type
+  }
+
+  func uninitialized(_ boundType: Type) -> Value {
+    boundType == .type ? Self.uninitializedType : UninitializedValue(boundType)
+  }
+}
+
+fileprivate extension Value {
+  var isInitialized: Bool {
+    dynamic_type == .type
+      ? Type(self)! != Memory.uninitializedType
+      : !(self is Memory.UninitializedValue)
   }
 }

@@ -715,7 +715,7 @@ fileprivate extension Interpreter {
     let partialResult = ChoiceValue(
       type: program.enclosingChoice[discriminator.structure]!.identity,
       discriminator: discriminator,
-      payload: Uninitialized(.tuple(payloadType)))
+      payload: memory.uninitialized(.tuple(payloadType)))
 
     return initialize(output, to: partialResult) { _, me in
       let payloadAddress
@@ -739,7 +739,7 @@ fileprivate extension Interpreter {
       }
       let payloadType = me.staticType[.tupleLiteral(call.arguments)]!
       let partialResult = StructValue(
-        type: structID, payload: Uninitialized(payloadType))
+        type: structID, payload: me.memory.uninitialized(payloadType))
 
       return me.initialize(output, to: partialResult) { _, me in
         let payloadAddress
