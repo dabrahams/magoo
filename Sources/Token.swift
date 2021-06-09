@@ -11,7 +11,7 @@ typealias TokenID = CarbonParser.CitronTokenCode
 /// A symbol recognized by the lexical analyzer.
 struct Token: AST {
   /// Creates an instance of the given token kind and content.
-  init(_ kind: TokenID, _ content: String, _ site: Site) {
+  init(_ kind: TokenID, _ content: String, _ site: ASTSite) {
     self.kind = kind
     self.text = content
     self.site = site
@@ -23,7 +23,7 @@ struct Token: AST {
   /// The textual content of this token.
   let text: String
 
-  let site: Site
+  let site: ASTSite
 }
 
 extension Token: CustomStringConvertible {
