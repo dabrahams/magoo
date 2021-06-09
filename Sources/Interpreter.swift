@@ -185,16 +185,22 @@ fileprivate extension Interpreter {
   }
 
   mutating func trace<Subject: AST>(
-    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0
+    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0,
+    filePath: StaticString = #filePath, line: UInt = #line
   ) {
-    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+    trace_(
+      subject.site, message(), indent: indent, level: &traceLevel,
+      filePath: filePath, line: line)
   }
 
   func trace<Subject: AST>(
-    _ subject: Subject, _ message: @autoclosure ()->String
+    _ subject: Subject, _ message: @autoclosure ()->String,
+    filePath: StaticString = #filePath, line: UInt = #line
   ) {
     var t = traceLevel
-    trace_(subject.site, message(), indent: 0, level: &t)
+    trace_(
+      subject.site, message(), indent: 0, level: &t,
+      filePath: filePath, line: line)
   }
 
   /// Accesses the value in `memory` at `a`, or halts the interpreted program

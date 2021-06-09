@@ -86,25 +86,35 @@ func indentation(_ n: Int) -> String {
 
 func trace_(
   _ site: ASTSite, _ message: @autoclosure ()->String,
-  indent: Int, level: inout Int?
+  indent: Int, level: inout Int?, filePath: StaticString, line: UInt
 ) {
   guard let n = level else { return }
   if indent < 0 { level = n + indent }
+
   print("\(site): info:\n\(indentation(level!))\(message())")
+  // uncomment to see the implementation sites interleaved with the source being
+  // compiled.
+  // print("\(filePath):\(line): info: implementation")
   if indent > 0 { level = n + indent }
 }
 
 private extension TypeChecker {
   mutating func trace<Subject: AST>(
-    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0
+    _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0,
+    filePath: StaticString = #filePath, line: UInt = #line
   ) {
-    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+    trace_(
+      subject.site, message(), indent: indent, level: &traceLevel,
+      filePath: filePath, line: line)
   }
 
   mutating func trace(
-    _ subject: Declaration, _ message: @autoclosure ()->String, indent: Int = 0
+    _ subject: Declaration, _ message: @autoclosure ()->String, indent: Int = 0,
+    filePath: StaticString = #filePath, line: UInt = #line
   ) {
-    trace_(subject.site, message(), indent: indent, level: &traceLevel)
+    trace_(
+      subject.site, message(), indent: indent, level: &traceLevel,
+      filePath: filePath, line: line)
   }
 }
 
