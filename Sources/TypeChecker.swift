@@ -164,8 +164,8 @@ private extension TypeChecker {
     }
   }
 
-  /// Records references from variable declarations in children to the given
-  /// parent initialization.
+  /// Records references from variable declarations to the enclosing
+  /// initialization.
   mutating func registerParent(in children: Pattern, as parent: Initialization) {
     switch children {
     case .atom: return
@@ -266,6 +266,7 @@ private extension TypeChecker {
 #endif
 }
 
+/// Computing the type of a declared entity.
 private extension TypeChecker {
   /// Returns the type of the entity declared by `d`.
   ///
@@ -531,12 +532,7 @@ private extension TypeChecker {
   }
 }
 
-// FIXME: There is significant code duplication between pattern and expression
-// type computation.  Perhaps upgrade expressions to patterns and use the same
-// code to check?
-
-
-/// Pattern checking and type deduction.
+/// Pattern checking and `auto` type deduction.
 private extension TypeChecker {
   /// Returns the type matched by `p`, using `rhs`, if supplied, to deduce `auto`
   /// types, and logging any errors.

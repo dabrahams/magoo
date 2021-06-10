@@ -210,6 +210,7 @@ fileprivate extension Interpreter {
   }
 }
 
+/// Running statements.
 fileprivate extension Interpreter {
   /// Executes `s`, and then, absent interesting control flow,
   /// `proceed`.

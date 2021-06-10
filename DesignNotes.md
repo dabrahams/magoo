@@ -7,11 +7,11 @@ right design reveals itself as the work goes on.
 
 ## General Principles
 
-Throughout the design, an effort was made to capture distinctions in static type
-information where possible.  For example, `Pattern`s are distinguished from
-`Expression`s, even though there is significant overlap between them.  The idea
-is to leave guideposts that make the code more understandable and easier to work
-on.
+Throughout the design, an effort was made to capture useful distinctions with
+static type information where possible.  For example, `Pattern`s,
+`TypeExpression`s, and `Expression`s are represented by distinct types, even
+though there is significant overlap between them.  The idea is to leave
+guideposts that make the code more understandable and easier to work on.
 
 We've also tried to ensure that executable semantics implementors can't easily
 and unknowingly do things that don't translate into an AOT compiler.  For
@@ -167,9 +167,20 @@ Name resolution has three jobs:
 3. Report errors for any names defined twice the same scope.
 
 Step two is not strictly part of name resolution, but the result is needed by
-the `Interpreter` and it saves lots of complexity to do it here.  All the work
-gets done in the initializer; property maps and errors are collected in
-properties of the created instance.
+the `Interpreter` and it saves lots of complexity to do it here. Name resolution
+is order-independent, because it can be, and because any ordering requirements
+placed on users should be a product of conscious design decisions and not pure
+implementation artifacts.
+
+All the work gets done in the initializer of `NameResolution`.  Property maps
+and errors are collected in properties of the created instance.  The source is
+divided into rough functional groups by doc-commented `extension`s.
 
 ### Type Checking
 
+`TypeChecker` has a similar structure to that of `NameResolution`, described
+just above.  The computed types of names and expressions are memoized in
+property maps so that checking can proceed in an order dictated by the needs of
+the Carbon code, and so that dependency cycles can be detected, without
+repeating work. These types are also used by the interpreter when evaluating
+code.

@@ -19,14 +19,20 @@ goes on.
   
 ## Things that should definitely be fixed at some point (IMO).
 
+- Unless you start requiring braces around the bodies of `if`/`else` and `while`
+  statements, they should be interpreted inside an `inScope` call.  Currently,
+  the lifetime of the rhs of any intialization statement that forms the entire
+  body of such a statement, without enclosing braces, will extend till the end
+  of the enclosing block.
+
 - There's a somewhat complicated system for translating the locations of errors
   that come out of examples in string literals like those found in
   TestTypeChecker.swift, so they point into the source (comment out the `+`
-  operators in `SourceRegion` and the compiler will point you at it).
-  Unfortunately, trace messages aren't errors and therefore don't get translated
-  in the same way.  It would be much better/simpler to adjust the string before
-  it is parsed, with a bunch of newlines and indentation on each line to make
-  locations in the string line up with locations in the test file,
+  operators in `SourceRegion` and the compiler will point you at the code for
+  this system).  Unfortunately, trace messages aren't errors and therefore don't
+  get translated in the same way.  It would be much better/simpler to adjust the
+  string before it is parsed, with a bunch of newlines and indentation on each
+  line to make locations in the string line up with locations in the test file,
   e.g. (untested code):
 
       ```swift
@@ -141,3 +147,21 @@ things I'd like to suggest you consider.
 - “Definition” and “declaration” are used somewhat interchangeably in names
   throughout the code.  Someone should figure out what these terms really mean
   to Carbon and decide how they should be used in the source.
+
+- There is significant code duplication between pattern and expression type
+  computation.  On the one hand, I know for a fact that handling each one
+  independently has prevented bugs.  On the other, somebody could think about
+  factoring out the commonality.
+
+- Code organization is somewhat freeform, with helper utilities like
+  `UNIMPLEMENTED` and `UNREACHABLE` in the file where they were first needed.
+  
+- The use of ad-hoc overloading was very convenient for initial implementation
+  (saved me from having to come up with new names), but I'm not convinced it's a
+  win for overall comprehensibility and maintainability. When “search for this
+  name” gives you multiple choices it's less useful than when it gives you just
+  one.
+
+- More complete interpreter testing using code coverage and eliminating uses of
+  UNIMPLEMENTED().  Lots of tiny examples, as in TestTypeChecker.swift.
+  

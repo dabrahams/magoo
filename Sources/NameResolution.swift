@@ -36,6 +36,7 @@ struct NameResolution {
   private(set) var errors: ErrorLog = []
 }
 
+/// General utilities
 private extension NameResolution {
   /// Returns the result of running `body(&self)` in a new sub-scope of the
   /// current one.
