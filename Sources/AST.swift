@@ -493,8 +493,7 @@ struct AnyASTIdentity: Hashable {
 /// The identity, in a program's source, of a `Node` instance.
 ///
 /// `ASTIdentity` additionally carries the structure of the AST node as
-/// auxilliary information for debugging purposes.  Otherwise it is equivalent
-/// to SourceRegion.
+/// auxilliary information.  Otherwise it is equivalent to SourceRegion.
 struct ASTIdentity<Node: AST>: Hashable {
   init(of n: Node) {
     self.structure = n
