@@ -46,10 +46,10 @@
   fail. Sometimes it's not obvious from a message whether it's a compile-time or
   runtime failure. See the scanner code for swift regex examples.
 
-- Currently the testdata example files are tested in several different test
-  files, to exercise the different phases, but in fact the interpreter tests
-  exercise everything.  Especially once the system in the bullet above is set
-  up, this duplication could be eliminated.
+- Currently the testdata example files are tested in several different Swift
+  test files, to exercise the different phases, but in fact the interpreter
+  tests exercise everything.  Especially once the system in the bullet above is
+  set up, this duplication could be eliminated.
 
 ## Things you might want to consider changing.
 
@@ -93,4 +93,6 @@ things I'd like to suggest you consider.
 
 - The trace output could be more useful/standardized.  The source location stuff
   that highlights code as you step through the trace is great, but I'm not
-  convinced the other aspects are optimal.
+  convinced the other aspects are optimal.  In particular, the interpreter
+  tracing is not doing indentation to denote nesting level the way the
+  typechecker tracing does, and the latter could be more consistent.
