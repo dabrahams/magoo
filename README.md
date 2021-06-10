@@ -38,7 +38,8 @@ from Xcode, or from the command-line
 
     make test-lcov
     
-to generate `.build/coverage.lcov` which you can inspect in Emacs using the
+to generate `.build/coverage.lcov`, a standard coverage format. If you use
+Emacs, you can inspect it using the
 [coverlay](https://github.com/twada/coverlay.el) package.  If you have a
 different tool that reads the json format created by the `swift test` command by
 default, it's

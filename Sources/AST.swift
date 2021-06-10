@@ -412,11 +412,8 @@ struct TypeExpression: AST {
 
 /// The declaration of a name.
 protocol Declaration {
-  /// A type that can be used to uniquely identify declarations in the source.
-  typealias Identity = AnyASTIdentity
-
   /// A unique identifier of this declaration, not based on its structure.
-  var identity: Identity { get }
+  var dynamicID: AnyASTIdentity { get }
 
   /// The name being declared.
   var name: Identifier { get }
@@ -426,7 +423,7 @@ protocol Declaration {
 }
 
 extension Declaration where Self: AST {
-  var identity: AnyASTIdentity { AnyASTIdentity(of: self) }
+  var dynamicID: AnyASTIdentity { AnyASTIdentity(of: self) }
 }
 
 protocol TypeDeclaration: Declaration {
