@@ -36,8 +36,8 @@ uniquely identify AST nodes (see the Parsing section).
 
 ### The AST 
 
-The AST is the central data structure for that everything after lexical analysis
-operates on.
+The AST (AST.swift) is the central data structure for that everything after
+lexical analysis operates on, so is key for understanding the rest of the system.
 
 #### Node Equality and Identity
 
@@ -53,9 +53,12 @@ identifier.  If node types correspond to grammar symbols, two distinct nodes
 having the same type and source region is impossible—it would imply the parser
 is in an infinite loop.  So node identity is based on location.
 
-Node *equality*, though, is based on content, not location.  That allows us to
-test that two `Identifier`s have the same name with simple equality, and to test
-that 
+Node *equality*, though, is based on content/structure, not location.  That
+allows us to check whether two `Identifier`s have the same name with simple
+equality and use them as hash keys, and to test that the parser gives expected
+results.
+
+To allow Swift to synthesize `Equatable` conformance for AST nodes, 
 
 ### Parsing
 
