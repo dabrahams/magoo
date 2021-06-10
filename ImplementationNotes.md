@@ -96,3 +96,9 @@ things I'd like to suggest you consider.
   convinced the other aspects are optimal.  In particular, the interpreter
   tracing is not doing indentation to denote nesting level the way the
   typechecker tracing does, and the latter could be more consistent.
+
+- The `Declaration` protocol and its refinement, `TypeDeclaration`, used as
+  existentials, are not necessarily pulling their weight and create a
+  discontinuity with the “closed” polymorphism created created by the `enum`s
+  used elsewhere.  It might be better to eliminate them or replace them with
+  `enums`.
