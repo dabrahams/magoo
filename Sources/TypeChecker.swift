@@ -56,7 +56,7 @@ struct TypeChecker {
   /// Memoized result of computing the type of the expression consisting of the
   /// name of each declared entity.
   private(set) var typeOfNameDeclaredBy
-    = Dictionary<Declaration.Identity, Memo<Type>>()
+    = Dictionary<AnyASTIdentity, Memo<Type>>()
 
   /// The payload tuple type for each alternative.
   private(set) var payloadType: [ASTIdentity<Alternative>: TupleType] = [:]
@@ -272,7 +272,7 @@ private extension TypeChecker {
   ///   or is declared as a type expression rather than with `auto`.
   mutating func typeOfName(declaredBy d: Declaration) -> Type {
     // Check the memo
-    switch typeOfNameDeclaredBy[d.identity] {
+    switch typeOfNameDeclaredBy[d.dynamicID] {
     case .beingComputed:
       return error(d.name, "type dependency loop")
     case let .final(t):
@@ -280,7 +280,7 @@ private extension TypeChecker {
     case nil: ()
     }
     trace(d, "\(#function) = ...", indent: +1)
-    typeOfNameDeclaredBy[d.identity] = .beingComputed
+    typeOfNameDeclaredBy[d.dynamicID] = .beingComputed
 
     let r: Type
     switch d { // Initialize r.
@@ -293,7 +293,7 @@ private extension TypeChecker {
       }
       else {
         check(enclosingInitialization[x]!)
-        if case let .final(r0) = typeOfNameDeclaredBy[d.identity]! { r = r0 }
+        if case let .final(r0) = typeOfNameDeclaredBy[d.dynamicID]! { r = r0 }
         else { UNREACHABLE() }
       }
 
@@ -312,7 +312,7 @@ private extension TypeChecker {
     }
 
     // memoize the result.
-    typeOfNameDeclaredBy[d.identity] = .final(r)
+    typeOfNameDeclaredBy[d.dynamicID] = .final(r)
     trace(d, "\(#function) = \(r)", indent: -1)
     return r
   }
@@ -321,7 +321,7 @@ private extension TypeChecker {
   /// its signature, and, if `f` was declared with `=>`, in its body expression.
   mutating func typeOfName(declaredBy f: FunctionDefinition) -> Type {
     // Don't bypass memoization in case we are called directly.
-    if typeOfNameDeclaredBy[f.identity] != .beingComputed {
+    if typeOfNameDeclaredBy[f.dynamicID] != .beingComputed {
       return typeOfName(declaredBy: f as Declaration)
     }
 
@@ -555,7 +555,7 @@ private extension TypeChecker {
       let r = binding.type.expression.map { value($0) }
         ?? rhs ?? error(
           binding.type, "No initializer available to deduce type for auto")
-      typeOfNameDeclaredBy[binding.identity] = .final(r)
+      typeOfNameDeclaredBy[binding.dynamicID] = .final(r)
       return r
       // Hack for metatype subtyping---replace with real subtyping.
       // return rhs.map { r == .type && $0.isMetatype ? $0 : r } ?? r

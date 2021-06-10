@@ -28,7 +28,7 @@ struct ExecutableProgram {
   let enclosingInitialization: ASTDictionary<SimpleBinding, Initialization>
 
   /// The type of the expression consisting of the name of each declared entity.
-  let typeOfNameDeclaredBy: Dictionary<Declaration.Identity, Memo<Type>>
+  let typeOfNameDeclaredBy: Dictionary<AnyASTIdentity, Memo<Type>>
 
   /// The unique top-level nullary main() function defined in `ast`,
   /// or `nil` if that doesn't exist.

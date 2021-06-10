@@ -609,7 +609,8 @@ fileprivate extension Interpreter {
 
     case let f as FunctionDefinition:
       let result = FunctionValue(
-        dynamic_type: program.typeOfNameDeclaredBy[f.identity]!.final!, code: f)
+        dynamic_type:
+          program.typeOfNameDeclaredBy[f.dynamicID]!.final!, code: f)
 
       return allocate(.name(name), unlessNonNil: destination) { output, me in
         me.initialize(output, to: result, then: proceed)
