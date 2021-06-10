@@ -5,6 +5,20 @@ design.  Not all the choices here are necessarily optimal and are certainly not
 written in stone, even those with a solid rationale.  It is expected that the
 right design reveals itself as the work goes on.
 
+## General Principles
+
+Throughout the design, an effort was made to capture distinctions in static type
+information where possible.  For example, `Pattern`s are distinguished from
+`Expression`s, even though there is significant overlap between them.  The idea
+is to leave guideposts that make the code more understandable and easier to work
+on.
+
+We've also tried to ensure that executable semantics implementors can't easily
+and unknowingly do things that don't translate into an AOT compiler.  For
+example, while values in the interpreter carry their types, it's named
+`dynamic_type` rather than, simply, `type`, to prevent it from being used to
+implement constructs that should only depend on static type information.
+
 ## Architecture
 
 The system is primarily built in phases that (with one exception) are simple
@@ -24,6 +38,9 @@ language capability, by compiling with `-DNO_COMPILE_TIME_COMPUTE` (or by
 editing the source where `NO_COMPILE_TIME_COMPUTE` appears in
 TypeChecker.swift).  That may be useful for debugging/analysis of problems in
 programs that don't require significant compile-time computation.
+
+Phase 1-4 are captured in the initializer of `ExecutableProgram` a type that
+contains all the data needed by the interpreter to run the program.
 
 ### Lexical Analysis
 
@@ -65,10 +82,14 @@ annotation creates an uncomfortable engineering choice to either:
 Instead, the system uses the idea of “property maps”—developed for the Boost
 Graph Library—to store annotations.  The concept is to take data that you might
 otherwise store internally to a data structure, such as an AST node's type or a
-graph vertex's color, and put it in a parallel data structure where it can be
-looked up by the identity of the thing with which it is associated.
+graph vertex's color, and put it in a data structure like a dictionary or array,
+where it can be looked up by the identity of the thing with which it is
+associated.
 
-So the AST is always exactly what the parser produces, and 
+So, currently, the AST is never mutated once constructed, and the phases of
+translation are responsible for adding annotation information to property maps.
+The phases also use property maps as part of their internal processing; these
+are generally private properties that are discarded when the phase is complete.
 
 #### Node Equality and Identity
 
@@ -104,9 +125,9 @@ statically.  Both representations expose the identified node's content through a
 `structure` property.
 
 All AST nodes conform to the `AST` protocol, which is just an `Equatable` thing
-with a `site` in the Carbon source code.  `AST` categories such as
+annotated with a `site` in the Carbon source code.  `AST` categories such as
 `Declaration`, that cut across the distinct concrete types in the `AST`, are
-represented as protocols used as existential types.
+represented as protocols that are used as (existential) types.
 
 In summary, the key types and protocols of the AST are:
 - `AST`: All AST node types.
@@ -120,8 +141,35 @@ In summary, the key types and protocols of the AST are:
 - `ASTIdentity<Node>`, `AnyASTIdentity`: Representations of an AST node's
   identity that can be used as dictionary keys.
 
+#### ASTDictionary
+
+`ASTDictionary<Node, Value>` is a thin wrapper over
+`Dictionary<ASTIdentity<Node>, Value>` that looks `Value`s up by node identity
+but is subscripted with a `Node n` rather than `n.identity`, just to keep code
+clean.  It is used as a property map, where practical, throughout the implementation.
+
 ### Parsing
 
-
 We use the [Citron](http://roopc.net/citron/) parser generator, which is derived
-from the widely-ported [Lemon](https://www.hwaci.com/sw/lemon/lemon.html).
+from the widely-ported [Lemon](https://www.hwaci.com/sw/lemon/lemon.html).  The
+parser's only jobs are to validate syntax and build an AST.  The AST node types
+were chosen to correspond very closely to grammar symbols, so nearly all parse
+rules one-liners.  Lists, however, are represented by arrays for brevity and
+ease of later processing, rather than by a linked/nested structure that reflects
+how they are parsed.
+
+### Name Resolution
+
+Name resolution has three jobs:
+
+1. Associate each use of an `Identifier` with the definition it names.
+2. Identify which variable definitions are global.
+3. Report errors for any names defined twice the same scope.
+
+Step two is not strictly part of name resolution, but the result is needed by
+the `Interpreter` and it saves lots of complexity to do it here.  All the work
+gets done in the initializer; property maps and errors are collected in
+properties of the created instance.
+
+### Type Checking
+

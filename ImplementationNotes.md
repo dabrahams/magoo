@@ -1,11 +1,22 @@
 # Implementation Notes
 
-- If you have to look at the scanner details, you'll see a lot of translation
-  between UTF-16 offsets and String indices.  This is because Foundation's
-  regular expression support still(!) hasn't caught up with modern Swift.  It's
-  ugly but if you have to do something with regular expressions, reading this
-  code will show you how.
+This file documents implementation details, especially those with known
+weaknesses.  It is expected that the right design reveals itself as the work
+goes on.
 
+## General notes
+
+- If you have to look at the scanner details, you'll see a lot of nasty
+  translation between UTF-16 offsets and String indices.  This is because
+  Foundation's regular expression support still(!) hasn't caught up with modern
+  Swift.  It's ugly but if you have to do something with regular expressions,
+  reading this code will show you how.
+
+- Various compromises were made to cut down on boilerplate for the reader of the
+  code.  For example, normally I'd mark a type's API as `public` (even if the
+  type was `private` to some other scope).  Instead, I've left most APIs
+  `internal`, relying on an `@testable import` to expose them to test files.
+  
 ## Things that should definitely be fixed at some point (IMO).
 
 - There's a somewhat complicated system for translating the locations of errors
@@ -20,14 +31,14 @@
 
       ```swift
       let adjustedText = String(repeating: "\n", count: lineOffset)
-        + text.split(separator: "\n").map {
-            String(repeating: " ", count: indent) + $0
-          }
+        + text.split(separator: "\n").map { indentation(indent) + $0 }
           .joined(separator: "\n")
       ```
 - Errors thrown out of the parser should be converted to `CarbonError` so that
   we get good diagnostics for failed parses, like we do for failed
-  type-checking.
+  type-checking.  Citron supports a more sophisticated system, so parsing can
+  produce even more informative diagnostics, and recover, but it's unclear to me
+  that using it would be a worthwhile investment for executable semantics.
   
 - An system somewhat like LLVM's `lit` tool that lets you embed information
   about expected errors and return codes in Carbon comments, for the purposes of
@@ -51,6 +62,13 @@
   tests exercise everything.  Especially once the system in the bullet above is
   set up, this duplication could be eliminated.
 
+- Some effort was made to distinguish the grammar for patterns that bind at
+  least one variable (see the `binding` symbol) from those that are just
+  expressions.  This distinction ensures that the parser disallows
+  initializations like `var 3 = 3`, that don't bind any variables, but it adds a
+  lot of grammar complexity, and is probably better/simpler to handle in the
+  typechecker (and may fall out of statically ensuring irrefutability).
+  
 ## Things you might want to consider changing.
 
 Obviously you can make any change that makes sense to you, but there are a few
@@ -102,3 +120,24 @@ things I'd like to suggest you consider.
   discontinuity with the “closed” polymorphism created created by the `enum`s
   used elsewhere.  It might be better to eliminate them or replace them with
   `enums`.
+
+- `Int` and `Bool` have been extended to conform to `Value`, which gives them a
+  `subscript` operator.  If you find that jarring, consider creating `IntValue`
+  and `BoolValue` `struct`s.
+
+- Column limit: I used 80 columns so that readers wouldn't think I was giving
+  Swift an unfair advantage over Carbon's C++ code, but the standard enforced by
+  Google's swift-format tool is 100, and there are quite a few places where the
+  extra 20 columns would improve readability.
+  
+- Omitting `public`: it may get confusing when you see `private(set) var x: Y`
+  which really means `internal private(set) var x: Y`, i.e. a property that's
+  publicly readable and privately writable.  Consider marking these things
+  explicitly `public` inside of (implicitly) `internal` types.  Be warned that
+  about exposing module-level declarations as `public` can sometimes sign you up
+  for more than you bargained for, as types *used in* those declarations need to
+  be `public` too.
+  
+- “Definition” and “declaration” are used somewhat interchangeably in names
+  throughout the code.  Someone should figure out what these terms really mean
+  to Carbon and decide how they should be used in the source.
