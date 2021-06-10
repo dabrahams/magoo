@@ -18,7 +18,8 @@ struct ExecutableProgram {
   let staticType: ASTDictionary<Expression, Type>
 
   /// The payload tuple type for each alternative.
-  let payloadType: [ASTIdentity<Alternative>: TupleType]
+  let alternativePayload: [ASTIdentity<Alternative>: TupleType]
+  // Note: ASTDictionary would not be a win here.
 
   /// Mapping from alternative declaration to the choice in which it is defined.
   let enclosingChoice: ASTDictionary<Alternative, ChoiceDefinition>
@@ -65,7 +66,7 @@ struct ExecutableProgram {
     self.definition = nameLookup.definition
     self.globals = nameLookup.globals
     self.staticType = typeChecking.expressionType
-    self.payloadType = typeChecking.payloadType
+    self.alternativePayload = typeChecking.alternativePayload
     self.enclosingChoice = typeChecking.enclosingChoice
     self.enclosingInitialization = typeChecking.enclosingInitialization
     self.typeOfNameDeclaredBy = typeChecking.typeOfNameDeclaredBy

@@ -786,7 +786,7 @@ fileprivate extension Interpreter {
     guard case let .alternative(discriminator) = staticType[call.callee]
     else { UNREACHABLE() }
 
-    let payloadType = program.payloadType[discriminator]!
+    let payloadType = program.alternativePayload[discriminator]!
 
     let partialResult = ChoiceValue(
       type: program.enclosingChoice[discriminator.structure]!.identity,
@@ -1063,7 +1063,8 @@ fileprivate extension Interpreter {
       }
 
       return match(
-        p.arguments, toValueOfType: program.payloadType[subjectAlternative]!,
+        p.arguments,
+        toValueOfType: program.alternativePayload[subjectAlternative]!,
         at: subject, then: proceed)
 
     case .int, .bool, .type, .function, .tuple, .error, .alternative:

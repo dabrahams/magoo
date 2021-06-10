@@ -13,7 +13,7 @@ struct TypeChecker {
     self.nameLookup = nameLookup
     self.traceLevel = tracing ? 0 : nil
 
-    // Create "external parent links" for the AST in our parentXXX properties.
+    // Create "external parent links" for the AST in our enclosingXXX properties.
     for d in parsedProgram { registerParentage(in: d) }
 
     // Check the bodies of nominal types.
@@ -59,13 +59,14 @@ struct TypeChecker {
     = Dictionary<AnyASTIdentity, Memo<Type>>()
 
   /// The payload tuple type for each alternative.
-  private(set) var payloadType: [ASTIdentity<Alternative>: TupleType] = [:]
+  private(set) var alternativePayload:  // ASTDictionary is not a win for this.
+    [ASTIdentity<Alternative>: TupleType] = [:]
+
+  /// The payload type for each struct.
+  private var structPayload = ASTDictionary<StructDefinition, TupleType>()
 
   /// The set of initializations that have been completely typechecked.
   private var checkedInitializations = Set<Initialization.Identity>()
-
-  /// Mapping from struct to the parameter tuple type that initializes it.
-  private var initializerTuples = ASTDictionary<StructDefinition, TupleType>()
 
   /// Return type of function currently being checked, if any.
   private var expectedReturnType: Type? = nil
@@ -302,7 +303,7 @@ private extension TypeChecker {
 
     case let a as Alternative:
       let payload = value(TypeExpression(a.payload))
-      payloadType[a.identity] = payload == .error ? .void : payload.tuple!
+      alternativePayload[a.identity] = payload == .error ? .void : payload.tuple!
       r = .alternative(a.identity)
 
     case let x as StructMember:
@@ -348,10 +349,10 @@ private extension TypeChecker {
   mutating func initializerParameters(
     _ s: ASTIdentity<StructDefinition>
   ) -> TupleType {
-    if let r = initializerTuples[s.structure] { return r }
+    if let r = structPayload[s.structure] { return r }
     let r = s.structure.initializerTuple.fields(reportingDuplicatesIn: &errors)
       .mapFields { value($0) }
-    initializerTuples[s.structure] = r
+    structPayload[s.structure] = r
     return r
   }
 
@@ -470,7 +471,7 @@ private extension TypeChecker {
       return f.returnType
 
     case let .alternative(a):
-      let payload = payloadType[a]!
+      let payload = alternativePayload[a]!
       if argumentTypes != .tuple(payload) {
         error(
           e.arguments, "argument types \(argumentTypes)"
@@ -625,7 +626,7 @@ private extension TypeChecker {
       return calleeValue
 
     case let .alternative(a):
-      let payload = payloadType[a]!
+      let payload = alternativePayload[a]!
       let argumentTypes = patternType(
         p.arguments, initializerType: payload).tuple!
       if argumentTypes != payload {
