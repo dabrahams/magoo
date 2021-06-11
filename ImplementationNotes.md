@@ -16,6 +16,11 @@ goes on.
   code.  For example, normally I'd mark a type's API as `public` (even if the
   type was `private` to some other scope).  Instead, I've left most APIs
   `internal`, relying on an `@testable import` to expose them to test files.
+
+- `Value` is an existential protocol rather than an `enum` primarily so there
+  can be an is-a relationship between `Type` and `Value`.  There's no reason
+  `Type` couldn't also be a protocol, but one loses the maintainability
+  advantage of switch coverage testing.  Trade-offs.
   
 ## Things that should definitely be fixed at some point (IMO).
 

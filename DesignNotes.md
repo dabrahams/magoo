@@ -184,3 +184,11 @@ property maps so that checking can proceed in an order dictated by the needs of
 the Carbon code, and so that dependency cycles can be detected, without
 repeating work. These types are also used by the interpreter when evaluating
 code.
+
+#### `Value`s and `Type`s
+
+The type checking process also introduces the notion of `Value`s, which
+encompass all values that can be manipulated in the Carbon interpreter,
+including runtime type values, and are used in the type-checker to represent
+types and other compile-time constants.  The subset of values that are types are
+captured by `Type`.

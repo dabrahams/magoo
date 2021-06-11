@@ -58,7 +58,7 @@ struct TypeChecker {
   private(set) var typeOfNameDeclaredBy
     = Dictionary<AnyASTIdentity, Memo<Type>>()
 
-  /// The payload tuple type for each alternative.
+  /// The payload tuple type for each choice alternative.
   private(set) var alternativePayload:  // ASTDictionary is not a win for this.
     [ASTIdentity<Alternative>: TupleType] = [:]
 
@@ -554,9 +554,7 @@ private extension TypeChecker {
           binding.type, "No initializer available to deduce type for auto")
       typeOfNameDeclaredBy[binding.dynamicID] = .final(r)
       return r
-      // Hack for metatype subtyping---replace with real subtyping.
-      // return rhs.map { r == .type && $0.isMetatype ? $0 : r } ?? r
-      
+
     case let .tuple(t):
       return .tuple(
         t.fields(reportingDuplicatesIn: &errors).mapElements { (id, f) in
