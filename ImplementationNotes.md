@@ -21,6 +21,10 @@ goes on.
   can be an is-a relationship between `Type` and `Value`.  There's no reason
   `Type` couldn't also be a protocol, but one loses the maintainability
   advantage of switch coverage testing.  Trade-offs.
+
+- Using code coverage data (see README.md) and systematically eliminating
+  `UNIMPLEMENTED`s was an incredibly useful way to produce complete tests for
+  the type checker. Highly recommended for other parts of the system!
   
 ## Things that should definitely be fixed at some point (IMO).
 
@@ -103,7 +107,7 @@ things I'd like to suggest you consider.
   `insert` function to insert a new key).  Even simpler might be just to wrap
   the read-only lookups in a function/method call.
 
-- Naming.  I follow a general principle of avoiding the use of type information
+- Naming: I follow a general principle of avoiding the use of type information
   in non-type names, having found that the space is almost always better used to
   express something about the *role* of the entity.  However, I haven't written
   much code in a domain where there are often so many views of a thing with the
@@ -115,6 +119,10 @@ things I'd like to suggest you consider.
   project-wide, e.g. `targetV`, `targetT`, `targetE`, `targetA`.  I normally
   don't do abbrevs but in this case I think spelling out the same words over and
   over might do more harm than good.
+  
+- Naming: more consistency could be established; the interpreter uses both
+  “output” and “destination” (and probably “result” too) to mean the address of
+  a computed result.
 
 - Consider standardizing the single-unlabeled-payload-element pattern for `enum`
   cases, which makes it cleaner to factor large `switch` statements into separate
@@ -147,7 +155,7 @@ things I'd like to suggest you consider.
   explicitly `public` inside of (implicitly) `internal` types.  Be warned that
   about exposing module-level declarations as `public` can sometimes sign you up
   for more than you bargained for, as types *used in* those declarations need to
-  be `public` too.
+  be `public` too (unlike in C++, type aliases are not immune).
   
 - “Definition” and “declaration” are used somewhat interchangeably in names
   throughout the code.  Someone should figure out what these terms really mean
@@ -159,7 +167,8 @@ things I'd like to suggest you consider.
   factoring out the commonality.
 
 - Code organization is somewhat freeform, with helper utilities like
-  `UNIMPLEMENTED` and `UNREACHABLE` in the file where they were first needed.
+  `UNIMPLEMENTED` and `UNREACHABLE` defined in the file where they were first
+  needed.
   
 - The use of ad-hoc overloading was very convenient for initial implementation
   (saved me from having to come up with new names), but I'm not convinced it's a
@@ -168,5 +177,20 @@ things I'd like to suggest you consider.
   one.
 
 - More complete interpreter testing using code coverage and eliminating uses of
-  UNIMPLEMENTED().  Lots of tiny examples, as in TestTypeChecker.swift.
+  `UNIMPLEMENTED()`.  Lots of tiny examples, as in TestTypeChecker.swift.
   
+- If you don't want to worry about formatting, integrate swift-format as the
+  main project has integrated clang-tidy.
+  
+- `UNREACHABLE` should have a signature like `UNIMPLEMENTED`, taking variadic
+  arguments rather than a string.  Can always pass a string.
+  
+- It might be better to have distinct enums for the set of unary and binary
+  operators, rather than reusing TokenIDs.  Then you could get complete matching
+  checks for handlers of these operators and maybe `Token` wouldn't need to
+  conform to `AST`.
+  
+- I have an inkling that the pattern matching code would shrink if we were
+  primarily switching on the `staticType` of the subject-to-be-matched rather
+  than on the syntactic form of the pattern.
+

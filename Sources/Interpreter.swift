@@ -1128,8 +1128,5 @@ fileprivate extension TupleSyntax {
     return r
   }
 }
-// TODO: UNREACHABLE variadic signature
-// TODO: enums for unary and binary operators.
-// TODO: drive matching from source value type.
 // TODO: break assign down into subtasks.
 // TODO: output vs. destination?

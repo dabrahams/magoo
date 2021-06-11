@@ -176,7 +176,7 @@ All the work gets done in the initializer of `NameResolution`.  Property maps
 and errors are collected in properties of the created instance.  The source is
 divided into rough functional groups by doc-commented `extension`s.
 
-### Type Checking
+### Type Checker
 
 `TypeChecker` has a similar structure to that of `NameResolution`, described
 just above.  The computed types of names and expressions are memoized in
@@ -192,3 +192,19 @@ encompass all values that can be manipulated in the Carbon interpreter,
 including runtime type values, and are used in the type-checker to represent
 types and other compile-time constants.  The subset of values that are types are
 captured by `Type`.
+
+### Interpreter
+
+In order to support non-trivial control flow and modeling of processes like
+threading, the interpreter uses a [trampolined continuation-passing
+style](https://en.wikipedia.org/wiki/Trampoline_(computing)#High-level_programming)
+(CPS).  The idea is to never hide the execution of what could end up being an
+arbitrary amount of Carbon code behind a single step of the interpreter.  In
+many cases I've anticipated things that are expected to eventually be in Carbon
+and arranged the code to accomodate their arrival, sometimes introducing
+complexity that might seem unjustified given the currently-implemented language.
+For example, compound values like tuples are initialized part-wise in memory.
+
+- Please see the interpreter deep dive video from June 10, 2021 for everything
+  else I would have written here.
+  

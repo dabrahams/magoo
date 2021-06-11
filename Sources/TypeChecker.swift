@@ -99,6 +99,7 @@ func trace_(
   if indent > 0 { level = n + indent }
 }
 
+/// Tracing.
 private extension TypeChecker {
   mutating func trace<Subject: AST>(
     _ subject: Subject, _ message: @autoclosure ()->String, indent: Int = 0,
