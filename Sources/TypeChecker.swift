@@ -22,7 +22,7 @@ struct TypeChecker {
     // Check function signatures.
     for d in parsedProgram {
       if case .function(let f) = d {
-        _ = typeOfName(declaredBy: f as Declaration)
+        _ = typeOfName(declaredBy: f)
       }
     }
     // Check top-level initializations
