@@ -14,7 +14,7 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v2
           with:
-            submodules: true
+            submodules: false
         - name: Swift Version
           run: |
             xcodebuild -version
@@ -39,7 +39,7 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v2
           with:
-            submodules: true
+            submodules: false
         - name: Swift Version
           run: swift --version
         - name: Build (Debug)
@@ -60,7 +60,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v2
               with:
-                submodules: true
+                submodules: false
 
             - name: Install swift-DEVELOPMENT-SNAPSHOT-2020-11-26
               run: |

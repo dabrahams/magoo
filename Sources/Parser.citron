@@ -6,6 +6,8 @@
 %class_name CarbonParser
 
 %preface {
+  import CitronParserModule
+
   /// Returns `first.site...last.site`
   fileprivate func ... <First: AST, Last: AST>(first: First, last: Last)
     -> ASTSite
@@ -16,7 +18,7 @@
   extension _CitronParserUnexpectedTokenError
     : CustomDebugStringConvertible
   {
-    var debugDescription: String {
+    public var debugDescription: String {
       "UnexpectedToken(token: \(token), tokenCode: \(tokenCode))"
     }
   }

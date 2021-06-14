@@ -15,10 +15,15 @@ let package = Package(
             name: "CarbonInterpreter",
             targets: ["CarbonInterpreter"]),
     ],
+    dependencies: [
+        // Dependencies declare other packages that this package depends on.
+        .package(url: "https://github.com/roop/citron.git", .branch("master"))
+    ],
     targets: [
         .target(
             name: "CarbonInterpreter",
-            dependencies: [],
+            dependencies: [
+              .product(name: "CitronParserModule", package: "citron")],
             path: "Sources",
             // Swift Package manager doesn't yet know how to process this file
             // so we handle it with Make.  See Makefile for details.

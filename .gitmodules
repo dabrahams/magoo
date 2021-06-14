@@ -2,6 +2,3 @@
 # Exceptions. See /LICENSE for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-[submodule "citron"]
-	path = citron
-	url = https://github.com/roop/citron

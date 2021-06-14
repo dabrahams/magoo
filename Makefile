@@ -9,8 +9,6 @@ GRAMMAR = ./Sources/Parser
 CC = cc
 SWIFTC = swiftc
 BIN = ./bin
-CITRON_SRC = ./citron/src
-CITRON = ${BIN}/citron
 SWIFT_FLAGS =
 LCOV_FILE = ./.build/coverage.lcov
 SHELL=/bin/bash
@@ -31,13 +29,11 @@ test-lcov: ${GRAMMAR}.swift
 test-jcov: ${GRAMMAR}.swift
 	swift test --enable-test-discovery --enable-code-coverage ${SWIFT_FLAGS}
 
-${CITRON}: ${CITRON_SRC}/citron.c
-	mkdir -p ${BIN} && ${CC} $^ -o $@
-
 clean:
 	rm -rf ${GRAMMAR}.swift ./.build
 
-${GRAMMAR}.swift: ${CITRON} ${GRAMMAR}.citron
+${GRAMMAR}.swift: ${GRAMMAR}.citron
 	rm -f $@
-	${CITRON} ${GRAMMAR}.citron -o $@
-	chmod -w $@
+	swift build --target citron              # Build citron executable
+	swift run citron ${GRAMMAR}.citron -o $@ # Generate the grammar
+	chmod -w $@                              # prevent unintended edits
