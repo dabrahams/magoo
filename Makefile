@@ -40,6 +40,6 @@ clean:
 
 ${GRAMMAR}.swift: ${GRAMMAR}.citron
 	rm -f $@
-	swift build -v --target citron # Build citron executable
+	swift build --target citron # Build citron executable
 	swift run citron ${GRAMMAR_OPTS} ${GRAMMAR}.citron -o $@ # Generate the grammar
 	chmod -w $@                              # prevent unintended edits

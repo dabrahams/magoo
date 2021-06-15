@@ -82,6 +82,8 @@ jobs:
 
             - name: Swift Version
               run: swift --version
+            - name: Build citron executable
+              run: swift build --target citron
             - name: Generate parser
               run: make CC=gcc ./Sources/Parser.swift
             - name: Build (Debug)
