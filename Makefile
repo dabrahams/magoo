@@ -34,6 +34,7 @@ clean:
 
 ${GRAMMAR}.swift: ${GRAMMAR}.citron
 	rm -f $@
-	swift build -v --target citron -Xlinker -lswiftCore # Build citron executable
-	swift run citron ${GRAMMAR}.citron -o $@ # Generate the grammar
+        # Note: linker options are for Windows
+	swift build --product citron -Xlinker swiftCore.lib # Build citron executable
+	swift run citron -Xlinker swiftCore.lib ${GRAMMAR}.citron -o $@ # Generate the grammar
 	chmod -w $@                              # prevent unintended edits
