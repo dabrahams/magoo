@@ -83,9 +83,7 @@ jobs:
             - name: Swift Version
               run: swift --version
             - name: Generate parser
-              run: |
-                swift build --target citron              # Build citron executable
-                swift run citron ${GRAMMAR}.citron -o Sources/Parser.swift # Generate the grammar
+              run: make CC=gcc ./Sources/Parser.swift
             - name: Build (Debug)
               run: swift build -v -c debug
             - name: Build (Release)
