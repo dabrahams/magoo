@@ -177,7 +177,7 @@ struct Tokens: Sequence {
           + tokenLines.last!.count
 
         let matchedText = String(tokenText)
-        if let matchedID = bestMatchUTF16Length == 0 ? .ILLEGAL_CHARACTER
+        if let matchedID = bestMatchUTF16Length == 0 ? TokenID.ILLEGAL_CHARACTER
              : bestMatchIndex == 0 ? keywords[matchedText]
              : matchers[bestMatchIndex].tokenID
         {

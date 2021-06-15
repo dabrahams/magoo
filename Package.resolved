@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "citron",
+        "repositoryURL": "https://github.com/roop/citron.git",
+        "state": {
+          "branch": "master",
+          "revision": "05da7347b03fe8830f93c48bdeeddebf8ac9db3f",
+          "version": null
+        }
+      }
+    ]
+  },
+  "version": 1
+}
