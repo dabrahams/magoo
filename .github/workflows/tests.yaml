@@ -85,7 +85,7 @@ jobs:
             - name: Build citron executable
               run: swift build --target citron
             - name: Generate parser
-              run: make CC=gcc ./Sources/Parser.swift
+              run: swift run citron -Xlinker swiftCore.lib ./Sources/Parser.citron -o ./Sources/Parser.swift
             - name: Build (Debug)
               run: swift build -v -c debug
             - name: Build (Release)
