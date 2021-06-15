@@ -13,6 +13,12 @@ SWIFT_FLAGS =
 LCOV_FILE = ./.build/coverage.lcov
 SHELL=/bin/bash
 
+ifeq ($(OS),Windows_NT)
+    GRAMMAR_OPTS =  -Xlinker swiftCore.lib
+else
+    GRAMMAR_OPTS =
+endif
+
 build: ${GRAMMAR}.swift
 	swift build --enable-test-discovery ${SWIFT_FLAGS}
 
@@ -34,7 +40,6 @@ clean:
 
 ${GRAMMAR}.swift: ${GRAMMAR}.citron
 	rm -f $@
-        # Note: linker options are for Windows
-	swift build --product citron -Xlinker swiftCore.lib # Build citron executable
-	swift run citron -Xlinker swiftCore.lib ${GRAMMAR}.citron -o $@ # Generate the grammar
+	swift build --product citron ${GRAMMAR_OPTS} # Build citron executable
+	swift run citron ${GRAMMAR_OPTS} ${GRAMMAR}.citron -o $@ # Generate the grammar
 	chmod -w $@                              # prevent unintended edits
